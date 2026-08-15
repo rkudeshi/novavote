@@ -44,79 +44,133 @@ every site from "Jim Scott" onward by one position. Row totals still summed
 correctly, which is why it wasn't caught until each site column was checked
 against its own published grand total individually. There are 16 sites, not 17.
 
-**Frontend (`src/App.jsx`)** — now a real Vite + React project (built with
-`npm run dev` / `npm run build`), not a standalone artifact file. Data is no
-longer hand-inlined: `scripts/gen-data.mjs` compiles `data/*.csv` into
-`src/data/generated/*.js` at build time (wired via `predev`/`prebuild` npm
-hooks), and `App.jsx` imports `DATASETS` from there. That generated
-directory is gitignored — it's build output. `gen-data.mjs` re-asserts the
-same reconciliation totals `build_csvs.py` checks, so a bad regeneration
-fails the build instead of shipping silently wrong numbers.
+**Frontend — v2 (`src/`)**. Vite + React, light theme, real routes.
 
-`scripts/gen_data.py` (Python) is kept for reference — it's the original
-version of the same transform — but `gen-data.mjs` (Node) is what the npm
-build actually runs, so the frontend toolchain doesn't need Python. Keep
-them in sync if you change the data shape.
+```
+/                     cross-cycle overview + comparison
+/elections            index of every locality-election
+/e/<cycle-id>         per-election detail (charts, map, table)
+/versions             version archive
+/versions/v1          v1 preserved as a live component
+```
 
-Both `recharts` charts (`DailyVolume` bar/line toggle) have been verified
-rendering correctly in a real browser (headless Chromium against `vite dev`),
-along with the rest of the page — this was previously only syntax-checked,
-per the prior version of this file.
+Routing is a ~60-line path router (`src/lib/router.jsx`). GitHub Pages has
+no rewrite rules, so `vite.config.js` copies `index.html` to `404.html` at
+build time — Pages serves that for any deep path and the app boots and
+reads `location.pathname`. Don't switch to hash routing without a reason.
 
-Sections, top to bottom:
-1. **Ballot grid (the signature element)** — a heatmap-style grid, one row per
-   site, one column per day, color-coded by volume. Sites not yet open render
-   as dashed outlines rather than zero. The Oct 23 expansion column is
-   highlighted. This is the thing worth preserving/extending first if you
-   redo the visual design — it's the most distinctive part.
-2. Stat strip (turnout headline numbers)
-3. Daily volume chart (stacked bar / cumulative line toggle, by method)
-4. Site ranking (sortable horizontal bars)
-5. Full data table (sortable, CSV download button)
-6. Roadmap section (shows what's loaded vs. queued — Loudoun, Prince William,
-   Arlington, Alexandria, Richmond, Virginia Beach)
+**The visualisations, and why they are what they are.** v1's signature
+site x day oval grid was removed. It failed structurally: early voting
+follows the same arc everywhere, so every row was a copy of the county
+curve and the grid mostly encoded the calendar. Its replacements:
 
-Design direction: dark navy background, warm amber + teal accent, Space
-Grotesk display / IBM Plex Sans body / IBM Plex Mono for data — chosen to
-avoid the generic "AI-generated" defaults (cream+terracotta, black+neon,
-broadsheet). Ovals in the brand mark and grid nod to a ballot-punch motif.
-CSS is still a CSS-in-JS template string injected via `<style>` in
-`App.jsx` (unchanged from the artifact version) — fine for now, but a
-candidate to move to a real `.css` file / CSS modules if the styling grows.
+- `SurgeChart` — daily volume against **days until Election Day**, not
+  calendar date. That indexing is what makes cycles and jurisdictions
+  comparable at all; a Tuesday in 2023 and a Tuesday in 2025 are not the
+  same moment, but "14 days out" is. Three metrics: daily share, banked
+  to date, share of electorate.
+- `SiteRhythm` — each site's share of a given day divided by its share of
+  the whole cycle. Cancels the shared arc, leaving only the site-specific
+  residual (who ran early, who ran late). Rows sorted by that tilt.
+- `SiteMap` — sites on the real county boundary, oval **area**
+  proportional to the chosen metric. The per-day/total toggle is the
+  point: sites open on different dates, so a raw total mostly measures
+  how long a site was open.
 
-The Google Fonts `@import` in that CSS needs outbound network access to
-`fonts.googleapis.com`; it degrades gracefully to system fonts if blocked
-(e.g. in a sandboxed dev environment), so don't treat a font-load 404 as a
-bug.
+**Data palette** is colourblind-validated as a set against the white chart
+surface (worst all-pairs CVD dE 9.2, normal-vision 24.0). Drop-box aqua
+sits under 3:1 contrast, so anything using it ships direct labels and a
+table view as relief. Re-validate if those three hexes change.
 
-**Site coordinates** — `SITE_COORDS` in `scripts/gen-data.mjs` (and the
-original `scripts/gen_data.py`) has **approximate, not authoritative**
-lat/lon for the 16 Fairfax sites, stubbed in for a future map view. Needs
-real geocoding before it's trustworthy.
+**Coverage is load-bearing, not documentation.** `coverage.complete` on a
+cycle drives dashed curves, "mid-cycle snapshot" badges, a warning banner,
+and suppression of final-week stats. It exists because the 2023 and 2024
+reports are mid-cycle snapshots (see below) — and it is the same mechanism
+an in-progress 2026 cycle will use while daily pulls are running.
+
+## Data pipeline
+
+Three scripts, all self-checking:
+
+- `scripts/build_csvs.py` — regenerates the 2025 CSVs from hand-transcribed
+  source data. Asserts every total including each of the 16 site columns
+  individually; that per-column check is what caught the Herndon
+  Fortnightly bug, so don't remove it.
+- `scripts/parse_report.py` — parses any AB Daily Report PDF into the same
+  CSV schema. Every report prints its own grand-total row, so each daily
+  column is summed and asserted against it; a misparse fails rather than
+  committing. Site rosters are discovered per report, never hardcoded.
+  Fused cells (the text layer occasionally runs two rows together, e.g.
+  `"8 1"`) are recovered from row identities, and only when exactly one
+  component is missing — so a site that had not opened is never invented.
+- `scripts/gen-data.mjs` — compiles `data/**.csv` into
+  `src/data/generated/`. Asserts published totals, rejects unlabelled
+  sites, rejects a cycle listing both halves of a site alias, and asserts
+  every site coordinate falls inside the county boundary.
+
+The dev sandbox has **no outbound access to fairfaxcounty.gov**, so PDF
+fetching and parsing run in CI (`.github/workflows/extract-report.yml`)
+and the CSVs are committed back. `scripts/find_reports.py` crawls the
+county site for other published reports.
+
+**Site renames**: `SITE_ALIASES` in `gen-data.mjs` maps an old key onto the
+current one so a renamed site joins across cycles. Providence Community
+Center -> Jim Scott Community Center is the live example. The build errors
+if a single cycle ever lists both.
+
+## Known data problems
+
+**The 2023 and 2024 reports are mid-cycle snapshots, not final reports.**
+The 2024 PDF's filename ("- 9.24") is literal: it stops 24 Sept 2024, five
+days into early voting, at 14,129 in-person ballots — a presidential cycle
+ends near 400k. The 2023 one stops 23 Oct, before any satellite site
+opened. Both are flagged `coverage.complete: false` and shown as partial.
+Finding the genuine end-of-cycle reports is open work.
+
+**v1 metadata was wrong and has been removed.** It carried
+`totalBallotsCast: 201588` and `turnoutPct: 24.89`. 201,588 is *exactly*
+the early-vote sum (137,221 + 51,413 + 12,954) and 24.89% is that over
+registered voters — neither is turnout including Election Day. Anything
+derived from them rendered as "100% of ballots were early". If a real
+total-turnout figure is ever sourced, add it under a clearly different
+name.
+
+**Site coordinates are still approximate.** They are hand-stubbed, and now
+plotted on a real Census boundary, which makes them look more
+authoritative than they are. The build asserts each falls inside the
+county; that catches gross errors, not a building on the wrong block.
+Real geocoding is open work.
+
+## Automation
+
+`.github/workflows/daily-pull.yml` runs daily and pulls every source
+marked `"active": true` in `data/sources.json`, parses, reconciles and
+commits. It no-ops while nothing is active. To turn on the 2026 cycle:
+fill in the URL, set `active: true`, and add the cycle to `CYCLES` in
+`gen-data.mjs`. Nothing else needs to change.
+
+`.github/workflows/deploy.yml` builds and publishes to GitHub Pages on
+every push to `main`.
 
 ## Not done yet / where to pick up
-- **Other counties**: Loudoun, Prince William, Arlington, Alexandria, Richmond,
-  Virginia Beach — need to find their equivalent daily reports and confirm
-  they're in a similar format before reusing `build_csvs.py`'s approach.
-- **2020–2024 historical data**: same county reports, prior cycles.
-- **Locality picker**: `App.jsx` currently always renders `DATASETS[0]`.
-  Once a second dataset exists, add a selector in the header.
-- **Precinct-level data**: the right upstream source is the Virginia Dept. of
-  Elections (ELECT) — specifically the Daily Absentee List (DAL), Registered
-  Voter List (RVL), and Comprehensive Absentee Application List (CAAL), which
-  are purchased data files, not a public API/download as far as I could
-  confirm. digitalpollwatchers.org (via EPEC) buys and republishes analysis
-  of these files, but they're a downstream analyst with stated positions on
-  ballot questions (they explicitly urge a "NO" vote on one in their own
-  posts) — fine as a pointer to methodology, not as the primary source. Worth
-  investigating VPAP.org and ELECT's own site for how to actually get DAL/RVL
-  access.
-- **Map view**: coordinates are stubbed, not real; site geocoding is unstarted.
-- No results/partisan data anywhere in this dataset by design — it's turnout
-  only (when/where ballots were cast). Keep it that way unless explicitly
-  asked to add results.
-- **Deployment**: not yet deployed anywhere (Vercel/Netlify/GitHub Pages are
-  all reasonable for a static Vite build — `npm run build` outputs to
-  `dist/`).
-- **Testing**: no automated tests yet. The reconciliation checks in
-  `gen-data.mjs` are the only automated correctness guard right now.
+- **Final 2023/2024 reports** — the two we have are partial (above).
+- **Other localities**: Loudoun, Prince William, Arlington, Alexandria,
+  Richmond, Virginia Beach. The comparison charts are already normalised
+  (days-until-election, share of electorate), so a new locality is one
+  more entry in `CYCLES` plus its CSVs — no chart changes.
+- **Registered-voter counts** for 2023/2024, so the "share of electorate"
+  comparison covers them; only 2025 has one.
+- **Real geocoding** for site coordinates.
+- **Precinct-level data**: the right upstream source is the Virginia Dept.
+  of Elections (ELECT) — Daily Absentee List (DAL), Registered Voter List
+  (RVL), Comprehensive Absentee Application List (CAAL), which are
+  purchased files, not a public download. digitalpollwatchers.org (via
+  EPEC) buys and republishes analysis of these, but they are a downstream
+  analyst with stated positions on ballot questions — fine as a pointer to
+  methodology, not as a primary source. Worth investigating VPAP.org and
+  ELECT directly.
+- **Testing**: no unit tests. The reconciliation assertions in the three
+  data scripts are the correctness guard.
+- No results or partisan data anywhere, by design. Turnout only — when and
+  where ballots were cast, nothing about who they were cast for. Keep it
+  that way unless explicitly asked.

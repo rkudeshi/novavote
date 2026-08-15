@@ -1,43 +1,97 @@
 #!/usr/bin/env node
-// Generates src/data/generated/*.js from the validated CSVs in data/.
-// Runs automatically before `npm run dev` / `npm run build` (see package.json
-// "predev"/"prebuild"). Do not hand-edit the generated output — edit the
-// CSVs (or scripts/build_csvs.py, which produces them) instead.
-//
-// This is a JS port of scripts/gen_data.py, kept in sync with it so the
-// frontend build doesn't require Python. If you change one, change both.
+// Compiles the per-cycle CSVs into src/data/generated/*.js.
+// Runs automatically before `npm run dev` / `npm run build`.
+// Do not hand-edit the output — edit the CSVs (or the scripts that
+// produce them: build_csvs.py for 2025, parse_report.py for the rest).
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const DATA_DIR = path.join(ROOT, 'data');
 const OUT_DIR = path.join(ROOT, 'src', 'data', 'generated');
 
-function readCsv(name) {
-  const text = readFileSync(path.join(DATA_DIR, name), 'utf8').replace(/\r\n/g, '\n').trim();
-  const [headerLine, ...lines] = text.split('\n');
-  const header = headerLine.split(',');
-  return lines.map((line) => {
-    const cells = line.split(',');
-    const row = {};
-    header.forEach((h, i) => { row[h] = cells[i]; });
-    return row;
-  });
-}
+/* ------------------------------------------------------------------
+   Cycle registry.
 
-function num(v) {
-  return v === '' || v === undefined || v === null ? null : Number(v);
-}
+   `coverage` is load-bearing, not documentation. The 2023 and 2024 PDFs
+   the project started from are mid-cycle snapshots — the 2024 one stops
+   five days into early voting — so their curves must never be presented
+   as a full cycle's shape. The same flag is what an in-progress 2026
+   cycle will carry while daily pulls are still running.
+------------------------------------------------------------------ */
+const CYCLES = [
+  {
+    id: 'fairfax-2025-general',
+    dir: 'data',                         // hand-validated, flat layout
+    locality: 'Fairfax County',
+    shortLabel: 'Fairfax 2025',
+    localityType: 'county',
+    electionName: 'General & Special Elections',
+    electionDate: '2025-11-04',
+    reportDate: '2025-11-07',
+    status: 'Final (county-labeled unofficial)',
+    registeredVoters: 809786,
+    // NOTE: v1 carried `totalBallotsCast: 201588` and `turnoutPct: 24.89`.
+    // Both were mislabelled — 201,588 is exactly the early-vote sum
+    // (137,221 + 51,413 + 12,954) and 24.89% is that over registered
+    // voters, not turnout including Election Day. Anything derived from
+    // them read as "100% of ballots were early", so they are gone;
+    // early-vote share of the electorate is computed from the CSVs.
+    coverage: { complete: true },
+    sourceUrl:
+      'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB-Daily-Report-Nov2025.pdf',
+    // Published grand totals, asserted below.
+    expect: { inPerson: 137221, returnedMail: 51413, returnedDropbox: 12954, ballotsMailed: 87547 },
+  },
+  {
+    id: 'fairfax-2024-general',
+    dir: 'data/parsed',
+    prefix: 'fairfax-2024-general_',
+    locality: 'Fairfax County',
+    shortLabel: 'Fairfax 2024',
+    localityType: 'county',
+    electionName: 'General Election (presidential)',
+    electionDate: '2024-11-05',
+    reportDate: '2024-09-24',
+    status: 'Mid-cycle snapshot — not a final report',
+    coverage: {
+      complete: false,
+      note:
+        'This report is a snapshot taken 24 September 2024, five days into early voting. It is not the end-of-cycle report, so totals here are a small fraction of the eventual 2024 turnout.',
+    },
+    sourceUrl:
+      'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%209.24.pdf',
+  },
+  {
+    id: 'fairfax-2023-general',
+    dir: 'data/parsed',
+    prefix: 'fairfax-2023-general_',
+    locality: 'Fairfax County',
+    shortLabel: 'Fairfax 2023',
+    localityType: 'county',
+    electionName: 'General Election',
+    electionDate: '2023-11-07',
+    reportDate: '2023-10-23',
+    status: 'Mid-cycle snapshot — not a final report',
+    coverage: {
+      complete: false,
+      note:
+        'This report is a snapshot taken 23 October 2023, two weeks before Election Day and before any satellite site opened. It is not the end-of-cycle report.',
+    },
+    sourceUrl:
+      'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/ab%20daily%20report%20november%202023.pdf',
+  },
+];
 
-const early = readCsv('early_in_person_by_site.csv');
-const mail = readCsv('returned_by_mail.csv');
-const drop = readCsv('returned_by_dropbox.csv');
-const mailed = readCsv('mailed_absentee_ballots.csv');
-
-const SITE_KEYS = Object.keys(early[0]).filter((k) => k !== 'date' && k !== 'total');
+/* Sites that changed name between cycles but are the same physical
+   location. Mapping the old key onto the current one is what lets a
+   site's history join up across elections instead of appearing as two
+   unrelated sites that each existed for a while. */
+const SITE_ALIASES = {
+  providence: { canonical: 'jim_scott', formerly: 'Providence Community Center' },
+};
 
 const SITE_LABELS = {
   government_center: 'Government Center',
@@ -52,137 +106,254 @@ const SITE_LABELS = {
   lorton: 'Lorton',
   mason: 'Mason',
   mclean: 'McLean',
+  providence: 'Providence',
   sully: 'Sully',
   thomas_jefferson: 'Thomas Jefferson',
   tysons_pimmit: 'Tysons-Pimmit',
   west_springfield: 'West Springfield',
 };
 
-// Approximate coordinates for the Fairfax County early voting sites
-// (community centers / govt buildings). Rounded; for map plotting these
-// should be replaced with authoritative geocodes.
+// Approximate, not authoritative — stubbed for a future map view.
 const SITE_COORDS = {
-  government_center: [38.8554, -77.3607],
-  mt_vernon: [38.7293, -77.1043],
-  north_county: [38.9526, -77.3494],
-  burke: [38.7934, -77.2717],
-  centreville: [38.8401, -77.4386],
-  franconia: [38.7712, -77.1524],
-  great_falls: [39.0018, -77.2872],
-  herndon_fortnightly: [38.9696, -77.3861],
-  jim_scott: [38.8676, -77.2280],
-  lorton: [38.7009, -77.2278],
-  mason: [38.8462, -77.1520],
-  mclean: [38.9343, -77.1775],
-  sully: [38.8879, -77.4344],
-  thomas_jefferson: [38.8462, -77.1861],
-  tysons_pimmit: [38.9021, -77.1936],
+  government_center: [38.8554, -77.3607], mt_vernon: [38.7293, -77.1043],
+  north_county: [38.9526, -77.3494], burke: [38.7934, -77.2717],
+  centreville: [38.8401, -77.4386], franconia: [38.7712, -77.1524],
+  great_falls: [39.0018, -77.2872], herndon_fortnightly: [38.9696, -77.3861],
+  jim_scott: [38.8676, -77.228], lorton: [38.7009, -77.2278],
+  mason: [38.8462, -77.152], mclean: [38.9343, -77.1775],
+  providence: [38.8807, -77.2264], sully: [38.8879, -77.4344],
+  thomas_jefferson: [38.8462, -77.1861], tysons_pimmit: [38.9021, -77.1936],
   west_springfield: [38.7743, -77.2158],
 };
 
-const mailByDate = Object.fromEntries(mail.map((r) => [r.date, r]));
-const dropByDate = Object.fromEntries(drop.map((r) => [r.date, r]));
-const mailedByDate = Object.fromEntries(mailed.map((r) => [r.date, r]));
-const earlyByDate = Object.fromEntries(early.map((r) => [r.date, r]));
+/* Elections are ordered by recency, not categorical, so they take steps
+   of one sequential ramp — newest darkest — rather than arbitrary hues. */
+const RECENCY_RAMP = ['#0d366b', '#2a78d6', '#5598e7', '#86b6ef', '#cde2fb'];
 
-const allDates = [...new Set([
-  ...Object.keys(mailByDate), ...Object.keys(dropByDate),
-  ...Object.keys(mailedByDate), ...early.map((r) => r.date),
-])].sort();
-
-const days = allDates.map((d) => {
-  const e = earlyByDate[d];
-  const m = mailByDate[d];
-  const dr = dropByDate[d];
-  const ml = mailedByDate[d];
-  const sites = {};
-  if (e) {
-    for (const k of SITE_KEYS) {
-      const v = num(e[k]);
-      if (v !== null) sites[k] = v;
-    }
-  }
-  return {
-    date: d,
-    inPerson: e ? num(e.total) : null,
-    sites,
-    returnedMail: m ? num(m.total_returned) : null,
-    returnedDropbox: dr ? num(dr.total_returned_dropbox) : null,
-    ballotsMailed: ml ? num(ml.total_mailed) : null,
-  };
-});
-
-const siteTotals = {};
-for (const k of SITE_KEYS) {
-  siteTotals[k] = early.reduce((sum, r) => sum + (num(r[k]) || 0), 0);
+function readCsv(file) {
+  if (!existsSync(file)) return null;
+  const text = readFileSync(file, 'utf8').replace(/\r\n/g, '\n').trim();
+  if (!text) return null;
+  const [headerLine, ...lines] = text.split('\n');
+  const header = headerLine.split(',');
+  return lines.map((line) => {
+    const cells = line.split(',');
+    return Object.fromEntries(header.map((h, i) => [h, cells[i]]));
+  });
 }
 
-const firstOpen = {};
-for (const k of SITE_KEYS) {
-  const row = early.find((r) => num(r[k]) !== null);
-  if (row) firstOpen[k] = row.date;
-}
+const num = (v) => (v === '' || v === undefined || v === null ? null : Number(v));
 
-const sitesMeta = SITE_KEYS.map((k) => ({
-  key: k,
-  label: SITE_LABELS[k],
-  total: siteTotals[k],
-  opened: firstOpen[k],
-  lat: SITE_COORDS[k][0],
-  lon: SITE_COORDS[k][1],
-}));
-
-const FAIRFAX_2025 = {
-  id: 'fairfax-2025-general',
-  locality: 'Fairfax County',
-  localityType: 'county',
-  electionName: 'General & Special Elections',
-  electionDate: '2025-11-04',
-  reportDate: '2025-11-07',
-  status: 'Final (county-labeled unofficial)',
-  registeredVoters: 809786,
-  totalBallotsCast: 201588,
-  turnoutPct: 24.89,
-  totals: {
-    ballotsMailed: 87547,
-    returnedMail: 51413,
-    returnedDropbox: 12954,
-    inPerson: 137221,
-    abApplicantsVotedInPerson: 1654,
-  },
-  sourceUrl: 'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB-Daily-Report-Nov2025.pdf',
-  sites: sitesMeta,
-  days,
+/** First column present out of `names`. */
+const pick = (row, names) => {
+  for (const n of names) if (row && row[n] !== undefined) return n;
+  return null;
 };
 
-// Sanity checks — mirror the assertions in scripts/build_csvs.py so a bad
-// regeneration fails the build loudly instead of shipping silently wrong data.
-const checks = [
-  ['ballotsMailed', mailed.reduce((s, r) => s + (num(r.total_mailed) || 0), 0)],
-  ['returnedMail', mail.reduce((s, r) => s + (num(r.total_returned) || 0), 0)],
-  ['returnedDropbox', drop.reduce((s, r) => s + (num(r.total_returned_dropbox) || 0), 0)],
-  ['inPerson', early.reduce((s, r) => s + (num(r.total) || 0), 0)],
-];
-for (const [key, sum] of checks) {
-  if (sum !== FAIRFAX_2025.totals[key]) {
-    throw new Error(`gen-data: ${key} CSV sum ${sum} != published total ${FAIRFAX_2025.totals[key]}`);
+function buildCycle(cycle) {
+  const base = path.join(ROOT, cycle.dir);
+  const f = (name) => path.join(base, `${cycle.prefix || ''}${name}.csv`);
+
+  const early = readCsv(f('early_in_person_by_site'));
+  const mail = readCsv(f('returned_by_mail'));
+  const drop = readCsv(f('returned_by_dropbox'));
+  const mailed = readCsv(f('mailed_absentee_ballots'));
+
+  if (!early) throw new Error(`gen-data: no early-voting CSV for ${cycle.id} (${f('early_in_person_by_site')})`);
+
+  const rawSiteKeys = Object.keys(early[0]).filter((k) => k !== 'date' && k !== 'total');
+  const canon = (k) => SITE_ALIASES[k]?.canonical ?? k;
+  const siteKeys = [...new Set(rawSiteKeys.map(canon))];
+
+  const unknown = siteKeys.filter((k) => !SITE_LABELS[k]);
+  if (unknown.length) throw new Error(`gen-data: ${cycle.id} has unlabelled sites: ${unknown.join(', ')}`);
+
+  // A renamed site must never appear twice in one cycle's roster — that
+  // would silently double-count it.
+  for (const [raw, alias] of Object.entries(SITE_ALIASES)) {
+    if (rawSiteKeys.includes(raw) && rawSiteKeys.includes(alias.canonical)) {
+      throw new Error(
+        `gen-data: ${cycle.id} lists both "${raw}" and "${alias.canonical}", which are aliased to the same site`,
+      );
+    }
+  }
+
+  /** Sum a canonical site's value on a row, following aliases. */
+  const siteValue = (row, key) => {
+    const sources = rawSiteKeys.filter((r) => canon(r) === key);
+    let out = null;
+    for (const r of sources) {
+      const v = num(row[r]);
+      if (v !== null) out = (out ?? 0) + v;
+    }
+    return out;
+  };
+
+  const mailTotalCol = mail && pick(mail[0], ['total_returned']);
+  const dropTotalCol = drop && pick(drop[0], ['total_returned_dropbox']);
+  const mailedTotalCol = mailed && pick(mailed[0], ['total_mailed']);
+
+  const byDate = (rows) => Object.fromEntries((rows || []).map((r) => [r.date, r]));
+  const earlyBy = byDate(early);
+  const mailBy = byDate(mail);
+  const dropBy = byDate(drop);
+  const mailedBy = byDate(mailed);
+
+  const allDates = [...new Set([
+    ...Object.keys(earlyBy), ...Object.keys(mailBy),
+    ...Object.keys(dropBy), ...Object.keys(mailedBy),
+  ])].sort();
+
+  const days = allDates.map((d) => {
+    const e = earlyBy[d];
+    const sites = {};
+    if (e) {
+      for (const k of siteKeys) {
+        const v = siteValue(e, k);
+        if (v !== null) sites[k] = v;
+      }
+    }
+    return {
+      date: d,
+      inPerson: e ? num(e.total) : null,
+      sites,
+      returnedMail: mailBy[d] && mailTotalCol ? num(mailBy[d][mailTotalCol]) : null,
+      returnedDropbox: dropBy[d] && dropTotalCol ? num(dropBy[d][dropTotalCol]) : null,
+      ballotsMailed: mailedBy[d] && mailedTotalCol ? num(mailedBy[d][mailedTotalCol]) : null,
+    };
+  });
+
+  const sum = (rows, col) =>
+    (rows || []).reduce((s, r) => s + (num(r[col]) || 0), 0);
+
+  const totals = {
+    inPerson: sum(early, 'total'),
+    returnedMail: mailTotalCol ? sum(mail, mailTotalCol) : 0,
+    returnedDropbox: dropTotalCol ? sum(drop, dropTotalCol) : 0,
+    ballotsMailed: mailedTotalCol ? sum(mailed, mailedTotalCol) : 0,
+  };
+
+  // Where published grand totals are known, a mismatch fails the build
+  // rather than shipping silently wrong figures.
+  if (cycle.expect) {
+    for (const [k, want] of Object.entries(cycle.expect)) {
+      if (totals[k] !== want) {
+        throw new Error(`gen-data: ${cycle.id} ${k} = ${totals[k]}, expected ${want}`);
+      }
+    }
+  }
+
+  const sites = siteKeys.map((k) => {
+    const total = early.reduce((s, r) => s + (siteValue(r, k) || 0), 0);
+    const openRow = early.find((r) => siteValue(r, k) !== null);
+    const renamed = Object.values(SITE_ALIASES).find(
+      (a) => a.canonical === k && rawSiteKeys.includes(
+        Object.keys(SITE_ALIASES).find((raw) => SITE_ALIASES[raw] === a)),
+    );
+    return {
+      key: k,
+      label: SITE_LABELS[k],
+      // Under the name this cycle's report actually used, so a historic
+      // page doesn't claim a name the site didn't have yet.
+      ...(renamed ? { formerly: renamed.formerly } : {}),
+      total,
+      opened: openRow ? openRow.date : null,
+      lat: SITE_COORDS[k]?.[0] ?? null,
+      lon: SITE_COORDS[k]?.[1] ?? null,
+    };
+  })
+    // A site the report lists but that recorded nothing in this snapshot
+    // isn't a site people voted at — carrying it would invent 13 empty
+    // rows in every per-site view.
+    .filter((s) => s.total > 0);
+
+  const active = days.filter(
+    (d) => (d.inPerson || 0) + (d.returnedMail || 0) + (d.returnedDropbox || 0) > 0,
+  );
+  const dataThrough = active.length ? active[active.length - 1].date : null;
+  const MS = 86400000;
+  const daysBeforeElection = dataThrough
+    ? Math.round((new Date(cycle.electionDate) - new Date(dataThrough)) / MS)
+    : null;
+
+  const { expect, dir, prefix, ...meta } = cycle;
+  return {
+    ...meta,
+    coverage: { ...cycle.coverage, dataThrough, daysBeforeElection },
+    totals,
+    sites,
+    days,
+  };
+}
+
+/* Site coordinates are hand-stubbed and still awaiting real geocoding.
+   They are plotted on a real county boundary, which makes them look
+   authoritative — so at minimum assert every one falls inside the
+   county. A typo that lands a site in Maryland fails the build. */
+function checkCoords(datasets) {
+  const boundaryFile = path.join(ROOT, 'src', 'data', 'fairfax-boundary.json');
+  if (!existsSync(boundaryFile)) {
+    console.warn('gen-data: no boundary file yet — skipping site coordinate check');
+    return;
+  }
+  const boundary = JSON.parse(readFileSync(boundaryFile, 'utf8'));
+  const county = boundary.features.find((f) => f.role === 'county');
+
+  const inRing = ([x, y], ring) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+
+  for (const ds of datasets) {
+    for (const s of ds.sites) {
+      if (s.lat == null || s.lon == null) {
+        throw new Error(`gen-data: ${ds.id} site "${s.key}" has no coordinates`);
+      }
+      if (!county.rings.some((r) => inRing([s.lon, s.lat], r))) {
+        throw new Error(
+          `gen-data: ${ds.id} site "${s.key}" at ${s.lat},${s.lon} is outside the county boundary`,
+        );
+      }
+    }
   }
 }
 
+const built = CYCLES.map(buildCycle)
+  .sort((a, b) => b.electionDate.localeCompare(a.electionDate))
+  .map((ds, i) => ({ ...ds, color: RECENCY_RAMP[Math.min(i, RECENCY_RAMP.length - 1)] }));
+
+checkCoords(built);
+
 mkdirSync(OUT_DIR, { recursive: true });
-writeFileSync(
-  path.join(OUT_DIR, 'fairfax-2025.js'),
-  `// AUTO-GENERATED by scripts/gen-data.mjs from data/*.csv. Do not hand-edit.\n` +
-  `export const FAIRFAX_2025 = ${JSON.stringify(FAIRFAX_2025, null, 2)};\n`,
-);
+for (const ds of built) {
+  writeFileSync(
+    path.join(OUT_DIR, `${ds.id}.js`),
+    `// AUTO-GENERATED by scripts/gen-data.mjs. Do not hand-edit.\n` +
+      `export default ${JSON.stringify(ds, null, 2)};\n`,
+  );
+}
 writeFileSync(
   path.join(OUT_DIR, 'index.js'),
   `// AUTO-GENERATED by scripts/gen-data.mjs. Do not hand-edit.\n` +
-  `export { FAIRFAX_2025 } from './fairfax-2025.js';\n` +
-  `import { FAIRFAX_2025 } from './fairfax-2025.js';\n\n` +
-  `// One dataset object per locality-election. To add a jurisdiction, append\n` +
-  `// here — no UI changes needed elsewhere.\n` +
-  `export const DATASETS = [FAIRFAX_2025];\n`,
+    built.map((ds) => `import ${ds.id.replace(/-/g, '_')} from './${ds.id}.js';`).join('\n') +
+    `\n\nexport const DATASETS = [\n` +
+    built.map((ds) => `  ${ds.id.replace(/-/g, '_')},`).join('\n') +
+    `\n];\n`,
 );
 
-console.log(`gen-data: wrote ${sitesMeta.length} sites, ${days.length} days -> src/data/generated/`);
+console.log('gen-data:');
+for (const ds of built) {
+  console.log(
+    `  ${ds.id.padEnd(24)} ${String(ds.sites.length).padStart(2)} sites, ` +
+      `${String(ds.days.length).padStart(2)} days, ` +
+      `${ds.totals.inPerson.toLocaleString().padStart(8)} in person, ` +
+      `${ds.coverage.complete ? 'complete' : `PARTIAL through ${ds.coverage.dataThrough}`}`,
+  );
+}

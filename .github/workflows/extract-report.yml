@@ -1,0 +1,75 @@
+name: Extract AB report PDFs
+
+# The county publishes these reports only as PDFs, and the dev sandbox has no
+# outbound access to fairfaxcounty.gov. This job fetches them from a runner
+# (which does), dumps the text layer for inspection, parses each into the
+# NovaVote CSV schema, and commits the result back to the branch.
+#
+# The parse is self-checking: every report prints its own grand-total row,
+# and scripts/parse_report.py asserts every daily column against it, so a
+# misparse fails the job instead of committing bad numbers.
+
+on:
+  push:
+    paths:
+      - 'scripts/extract_pdf.py'
+      - 'scripts/parse_report.py'
+      - 'scripts/find_reports.py'
+      - 'scripts/fetch_boundary.py'
+      - '.github/workflows/extract-report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pdfplumber pyshp
+
+      - name: Fetch county boundary
+        run: python scripts/fetch_boundary.py
+
+      - name: Discover published reports
+        continue-on-error: true
+        run: python scripts/find_reports.py
+
+      - name: Download and dump text layer
+        run: python scripts/extract_pdf.py
+
+      - name: Parse into CSVs
+        run: |
+          python scripts/parse_report.py pdf-extract/nov2023.pdf \
+            --year 2023 --cycle fairfax-2023-general
+          python scripts/parse_report.py pdf-extract/nov2024.pdf \
+            --year 2024 --cycle fairfax-2024-general
+          # 2025 is the control: we already have hand-validated CSVs for it,
+          # so a parser that reconciles here is trustworthy on the others.
+          python scripts/parse_report.py pdf-extract/nov2025.pdf \
+            --year 2025 --cycle fairfax-2025-general
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdf-extract
+          path: |
+            pdf-extract/
+            data/parsed/
+
+      - name: Commit parsed CSVs
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/parsed src/data/fairfax-boundary.json
+          if git diff --staged --quiet; then
+            echo "no CSV changes"
+          else
+            git commit -m "Parse AB report PDFs into CSVs [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
