@@ -10,6 +10,7 @@ import { useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
 import SiteRhythm from '../components/charts/SiteRhythm.jsx';
 import SiteMap from '../components/charts/SiteMap.jsx';
+import ReportSummary from '../components/charts/ReportSummary.jsx';
 
 const METHODS = [
   { key: 'inPerson', label: 'Early in person', color: 'var(--s1)', hex: '#2a78d6' },
@@ -62,6 +63,33 @@ export default function Election({ ds, all }) {
                  s={`of ${fmt(ds.totals.ballotsMailed)} mailed out`} />
             <Kpi k="Returned by drop box" v={fmt(ds.totals.returnedDropbox)}
                  s={`${pct((ds.totals.returnedDropbox / (ds.totals.returnedMail + ds.totals.returnedDropbox)) * 100, 0)} of returned absentee`} />
+          </div>
+        </div>
+      </section>
+
+      {/* Leads the page: everything on the county report's first page,
+          restated with its denominators visible. See ReportSummary for
+          why two of the county's own labels are not reused. */}
+      <section className="section">
+        <div className="wrap">
+          <div className="eyebrow">The report's front page, rebuilt</div>
+          <h2 className="h2" style={{ marginBottom: 8 }}>
+            Every headline figure, and what it is a share of
+          </h2>
+          <p className="note" style={{ marginBottom: 22 }}>
+            The county's report opens with one table and eleven loose
+            percentages — quotients over three different denominators, none of
+            them labelled. These are the same numbers as{' '}
+            {ds.registeredVoters ? 'three' : 'two'} proportional bars, one per
+            question the page is actually asking.{' '}
+            {ds.sourceUrl && (
+              <a href={ds.sourceUrl} target="_blank" rel="noreferrer">
+                Original PDF ↗
+              </a>
+            )}
+          </p>
+          <div className="card">
+            <ReportSummary ds={ds} />
           </div>
         </div>
       </section>

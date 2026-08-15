@@ -64,6 +64,21 @@ site x day oval grid was removed. It failed structurally: early voting
 follows the same arc everywhere, so every row was a copy of the county
 curve and the grid mostly encoded the calendar. Its replacements:
 
+- `ReportSummary` — leads every election page. The county's PDF opens
+  with one small table and eleven loose percentages taken over **three
+  different denominators** (registered voters, ballots issued, ballots
+  returned) with none of them labelled, so "74%", "80%", "32%" and "68%"
+  are answers to four different questions presented as a list. This is
+  the same figures as three proportional bars, one per question, each
+  part carrying its count, its share, and what it is a share of. Bar 3
+  is the one the PDF cannot draw: 87,547 issued − 51,413 − 12,954 −
+  1,654 leaves **21,526 mail ballots never returned**, a quarter of
+  every ballot issued and the most interesting number on the page.
+  A mid-cycle cycle relabels that residual "not returned as of this
+  report" and drops the ratios over its tiny denominators — for a
+  five-day snapshot, "99.5% never returned" would be a lie of framing.
+  Two of the county's own labels are deliberately **not** reused; see
+  LABEL NOTES at the foot of the component.
 - `SurgeChart` — daily volume against **days until Election Day**, not
   calendar date. That indexing is what makes cycles and jurisdictions
   comparable at all; a Tuesday in 2023 and a Tuesday in 2025 are not the
@@ -131,7 +146,11 @@ Three scripts, all self-checking:
 - `scripts/gen-data.mjs` — compiles `data/**.csv` into
   `src/data/generated/`. Asserts published totals, rejects unlabelled
   sites, rejects a cycle listing both halves of a site alias, and asserts
-  every site coordinate falls inside the county boundary.
+  every site coordinate falls inside the county boundary. `totals` also
+  carries `abInPerson` (mail requesters who voted in person instead —
+  the number that closes the ballot funnel, asserted at 1,654 for 2025)
+  and `undeliverable`, which is **null rather than 0** where the report
+  has no such column at all, as 2023's does not.
 
 The dev sandbox has **no outbound access to fairfaxcounty.gov**, so PDF
 fetching and parsing run in CI (`.github/workflows/extract-report.yml`)
