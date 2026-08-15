@@ -11,6 +11,7 @@ validated CSVs for it, so if a parser reproduces 2025's published grand
 totals from this text, the same approach can be trusted on other cycles.
 """
 
+import argparse
 import sys
 import urllib.request
 from pathlib import Path
@@ -36,7 +37,22 @@ def fetch(name, url):
     return dest
 
 
-def dump(name, path):
+def parse_pages(spec):
+    """'1', '1-3', '2,5-6' -> a set of 1-based page numbers. None = all."""
+    if not spec:
+        return None
+    out = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if "-" in part:
+            a, b = part.split("-", 1)
+            out.update(range(int(a), int(b) + 1))
+        elif part:
+            out.add(int(part))
+    return out or None
+
+
+def dump(name, path, pages=None):
     import pdfplumber
 
     text_out = OUT / f"{name}.txt"
@@ -44,6 +60,8 @@ def dump(name, path):
     with pdfplumber.open(path) as pdf:
         print(f"\n{'=' * 78}\n{name}: {len(pdf.pages)} pages\n{'=' * 78}", flush=True)
         for i, page in enumerate(pdf.pages, 1):
+            if pages and i not in pages:
+                continue
             header = f"\n----- {name} PAGE {i} -----"
             body = page.extract_text() or "(no text layer)"
             print(header, flush=True)
@@ -65,12 +83,19 @@ def dump(name, path):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("reports", nargs="*", help="report keys (default: all)")
+    ap.add_argument("--pages", default="",
+                    help="restrict output to these pages, e.g. '1' or '1-3'")
+    args = ap.parse_args()
+
     OUT.mkdir(exist_ok=True)
-    names = sys.argv[1:] or list(REPORTS)
+    names = args.reports or list(REPORTS)
+    pages = parse_pages(args.pages)
     failures = []
     for name in names:
         try:
-            dump(name, fetch(name, REPORTS[name]))
+            dump(name, fetch(name, REPORTS[name]), pages)
         except Exception as e:  # keep going so one dead URL doesn't hide the rest
             print(f"[ERROR] {name}: {type(e).__name__}: {e}", flush=True)
             failures.append(name)
