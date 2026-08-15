@@ -45,7 +45,9 @@ jobs:
           mkdir -p dist/versions
           # src/version.js is the single source of truth for what exists and
           # which commit each release shipped from.
-          node -e "import('./src/version.js').then(m=>console.log(JSON.stringify(m.ARCHIVED.map(r=>({v:r.v,commit:r.commit})))))" > /tmp/archived.json
+          # `slug` comes from version.js too, so the built directory and the
+          # link the site renders can never disagree (4.0 -> v4, 4.1 -> v4.1).
+          node -e "import('./src/version.js').then(m=>console.log(JSON.stringify(m.ARCHIVED.map(r=>({v:m.slug(r.v),commit:r.commit})))))" > /tmp/archived.json
           cat /tmp/archived.json
 
           COUNT=$(node -e "console.log(require('/tmp/archived.json').length)")

@@ -12,8 +12,10 @@ site through scripts/build_nova_totals.py, which reconciles what it writes.
 """
 
 import json
+import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -23,21 +25,51 @@ UA = {"User-Agent": "Mozilla/5.0 (NovaVote data survey)"}
 EVENT = "2025 November General"
 
 CANDIDATES = [
-    # Official ELECT results — these carry ballots-cast by method per locality
-    # in recent cycles, which is exactly the early in-person / by-mail split.
-    f"https://results.elections.virginia.gov/vaelections/{EVENT}/Json/ElectionEvent.json",
-    f"https://results.elections.virginia.gov/vaelections/{EVENT}/Json/Index.json",
-    "https://results.elections.virginia.gov/vaelections/index.html",
-    # ELECT turnout statistics landing pages.
+    # ELECT landing pages — harvested for links to the actual data files.
     "https://www.elections.virginia.gov/resultsreports/registrationturnout-statistics/",
-    "https://www.elections.virginia.gov/resultsreports/absentee-early-voting-statistics/",
-    # VPAP visualisations (downstream analyst — a pointer, not a primary source).
-    "https://www.vpap.org/visuals/visual/early-voting-comparison/",
+    "https://www.elections.virginia.gov/resultsreports/",
+    "https://www.elections.virginia.gov/resultsreports/absentee-statistics/",
+    # Official ELECT results — these carry ballots cast by method per
+    # locality, which is the early in-person / by-mail split we want.
+    "https://results.elections.virginia.gov/",
+    f"https://results.elections.virginia.gov/vaelections/{EVENT}/Site/Locality.html",
+    f"https://results.elections.virginia.gov/vaelections/{EVENT}/Json/ElectionEvent.json",
 ]
+
+
+# Links worth following out of an HTML landing page: data files, and
+# anything whose text mentions absentee / early / turnout.
+INTERESTING = re.compile(
+    r'(\.csv|\.xlsx?|\.zip|\.json|absentee|early[-_ ]?vot|turnout|november.?2025|2025.?november)',
+    re.I,
+)
+
+
+def harvest(base, html):
+    """Print every link on an HTML page that looks like data."""
+    hrefs = re.findall(r'href=["\']([^"\']+)["\']', html, re.I)
+    hits = []
+    for h in hrefs:
+        if h.startswith(("mailto:", "javascript:", "#")):
+            continue
+        full = urllib.parse.urljoin(base, h)
+        if INTERESTING.search(full):
+            hits.append(full)
+    seen, out = set(), []
+    for h in hits:
+        if h not in seen:
+            seen.add(h)
+            out.append(h)
+    print(f"[links] {len(out)} candidate data links:", flush=True)
+    for h in out[:80]:
+        print("   ", h, flush=True)
+    return out
 
 
 def probe(url):
     print(f"\n{'=' * 78}\n{url}\n{'=' * 78}", flush=True)
+    # Spaces and other literal characters are common in ELECT's paths.
+    url = urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%~")
     req = urllib.request.Request(url, headers=UA)
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
@@ -55,7 +87,10 @@ def probe(url):
     try:
         data = json.loads(text)
     except ValueError:
-        print(text[:1200], flush=True)
+        if "html" in ctype.lower():
+            harvest(url, text)
+        else:
+            print(text[:1500], flush=True)
         return None
 
     OUT.mkdir(exist_ok=True)

@@ -10,11 +10,11 @@
    Consequence worth knowing: the archive links only resolve on a
    deployed build. In local dev there is nothing at those paths.
 ------------------------------------------------------------------ */
-import { ARCHIVED, CURRENT, VERSION, VERSIONS } from '../version.js';
+import { ARCHIVED, CURRENT, VERSION, VERSIONS, slug } from '../version.js';
 import { Link } from '../lib/router.jsx';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-const archiveHref = (v) => `${BASE}/versions/${v}/`;
+const archiveHref = (v) => `${BASE}/versions/${slug(v)}/`;
 
 export default function Versions() {
   return (
@@ -60,7 +60,7 @@ export default function Versions() {
                 {/* A full page load, not a client route — the archive is a
                     separate build with its own assets. */}
                 <a className="btn" href={archiveHref(r.v)}>
-                  View v{r.v} →
+                  View {slug(r.v)} →
                 </a>
               </div>
               <p className="version-headline">{r.headline}</p>
