@@ -14,7 +14,7 @@
    fitting the whole grid on screen.
 ------------------------------------------------------------------ */
 import { useMemo, useState } from 'react';
-import { fmt, longDate, shortDate } from '../../lib/format.js';
+import { dayOfWeek, fmt, isWeekend, longDate, shortDate } from '../../lib/format.js';
 import { earlyTotal, siteDeviation } from '../../lib/derive.js';
 import { useInView } from '../../lib/motion.js';
 
@@ -75,16 +75,30 @@ export const METRICS = [
       'Ballots divided by hours open, which separates a genuinely busy site from one that simply opened for longer.',
   },
   {
-    key: 'ratio',
-    label: 'vs this site’s normal',
+    key: 'vsAverage',
+    label: 'vs this site’s daily average',
     scale: 'diverging',
     format: (n) => (n == null ? '' : `${n >= 1 ? '+' : '−'}${Math.round(Math.abs(n - 1) * 100)}%`),
     describe: (c) =>
-      c.ratio >= 1
-        ? `${((c.ratio - 1) * 100).toFixed(0)}% busier than normal`
-        : `${((1 - c.ratio) * 100).toFixed(0)}% quieter than normal`,
+      c.vsAverage == null
+        ? ''
+        : c.vsAverage >= 1
+          ? `${((c.vsAverage - 1) * 100).toFixed(0)}% above this site's daily average`
+          : `${((1 - c.vsAverage) * 100).toFixed(0)}% below this site's daily average`,
     blurb:
-      "Each site's share of a given day divided by its share of the whole cycle. Cancels the shared run-up to Election Day, leaving only what makes a site different: who ran early, who ran late.",
+      "That day's ballots against this site's own average across the days it was open. Straightforward to read, but note every site is above average near Election Day — the run-up is in here too.",
+  },
+  {
+    key: 'vsCountyPace',
+    label: 'vs the county’s pace that day',
+    scale: 'diverging',
+    format: (n) => (n == null ? '' : `${n >= 1 ? '+' : '−'}${Math.round(Math.abs(n - 1) * 100)}%`),
+    describe: (c) =>
+      c.vsCountyPace >= 1
+        ? `${((c.vsCountyPace - 1) * 100).toFixed(0)}% busier than the county moved that day`
+        : `${((1 - c.vsCountyPace) * 100).toFixed(0)}% quieter than the county moved that day`,
+    blurb:
+      "This site's share of the day's countywide vote, against its share of the whole cycle. Because it divides by what the county did, the shared run-up to Election Day cancels out — what's left is purely which sites ran early and which ran late.",
   },
 ];
 
@@ -138,9 +152,16 @@ export default function SiteRhythm({ ds }) {
   /* Build every metric per cell once. The grid is at most ~16x50, so
      computing all of them up front is cheaper than re-deriving on each
      toggle and keeps the switch instant. */
+  const weatherByDate = useMemo(
+    () => Object.fromEntries(ds.days.map((d) => [d.date, d.weather])),
+    [ds],
+  );
+
   const sites = useMemo(() => {
     const allEarly = earlyTotal(ds);
     return siteDeviation(ds).map((site) => {
+      const openDays = site.cells.filter((c) => c.open).length;
+      const dailyAverage = openDays ? site.total / openDays : 0;
       let run = 0;
       const cells = site.cells.map((c) => {
         if (!c.open) return { ...c, cumulative: null };
@@ -154,17 +175,22 @@ export default function SiteRhythm({ ds }) {
           shareOfAllEarly: allEarly ? (c.value / allEarly) * 100 : 0,
           perHour: h ? c.value / h : null,
           hoursOpen: h ?? null,
+          // `ratio` from siteDeviation() is the share-of-share; name it for
+          // what it measures rather than the vague "normal".
+          vsCountyPace: c.ratio,
+          vsAverage: dailyAverage ? c.value / dailyAverage : null,
+          weather: weatherByDate[c.date] ?? null,
         };
       });
       return { ...site, cells };
     });
-  }, [ds]);
+  }, [ds, weatherByDate]);
 
   const ordered = useMemo(() => {
     const arr = [...sites];
     // The deviation view is about ordering by behaviour; every other view
     // is about magnitude, where biggest-first is the useful order.
-    if (metricKey === 'ratio') arr.sort((a, b) => b.tilt - a.tilt);
+    if (metricKey === 'vsCountyPace') arr.sort((a, b) => b.tilt - a.tilt);
     else arr.sort((a, b) => b.total - a.total);
     return arr;
   }, [sites, metricKey]);
@@ -189,7 +215,7 @@ export default function SiteRhythm({ ds }) {
     if (!c.open) return null;
     const v = c[metricKey];
     if (v == null) return null;
-    return metric.scale === 'diverging' ? diverging(c.ratio) : sequential(v / maxVal);
+    return metric.scale === 'diverging' ? diverging(v) : sequential(v / maxVal);
   };
 
   return (
@@ -235,11 +261,21 @@ export default function SiteRhythm({ ds }) {
               }}
             >
               <div className="rhythm-corner" />
-              {dates.map((d, i) => (
-                <div key={d} className="rhythm-colhead">
-                  {showValues || i % 4 === 0 ? shortDate(d) : ''}
-                </div>
-              ))}
+              {dates.map((d, i) => {
+                const show = showValues || i % 4 === 0;
+                return (
+                  <div
+                    key={d}
+                    className={`rhythm-colhead ${isWeekend(d) ? 'is-weekend' : ''}`}
+                  >
+                    {/* Two lines: weekday above the date. Turnout has a
+                        strong weekly rhythm, so the day of week is as much
+                        context as the date itself. */}
+                    <span className="rhythm-dow">{show ? dayOfWeek(d) : ''}</span>
+                    <span className="rhythm-date">{show ? shortDate(d) : ''}</span>
+                  </div>
+                );
+              })}
 
               {ordered.map((s, rowIdx) => (
                 <Row
@@ -265,9 +301,22 @@ export default function SiteRhythm({ ds }) {
                   <span className="muted">{longDate(hover.cell.date)}</span>
                   <span>
                     <b>{fmt(hover.cell.value)}</b> ballots
-                    {hover.cell.hoursOpen ? ` over ${hover.cell.hoursOpen}h` : ''} ·{' '}
-                    {metric.describe(hover.cell)}
+                    {hover.cell.hoursOpen ? ` over ${hover.cell.hoursOpen}h` : ''}
+                    {/* The raw count is already printed above, so only add
+                        the metric's phrasing when it says something else. */}
+                    {metricKey !== 'perDay' && <> · {metric.describe(hover.cell)}</>}
                   </span>
+                  {hover.cell.weather && (
+                    <span className={`wx ${hover.cell.weather.wet ? 'is-wet' : ''} ${hover.cell.weather.snowy ? 'is-snowy' : ''}`}>
+                      {hover.cell.weather.snowy ? '❄' : hover.cell.weather.wet ? '☔' : '○'}{' '}
+                      {hover.cell.weather.label},{' '}
+                      {Math.round(hover.cell.weather.tempMax)}°/
+                      {Math.round(hover.cell.weather.tempMin)}°F
+                      {hover.cell.weather.precip >= 0.01
+                        ? ` · ${hover.cell.weather.precip.toFixed(2)}″`
+                        : ''}
+                    </span>
+                  )}
                 </>
               ) : (
                 <span className="muted">

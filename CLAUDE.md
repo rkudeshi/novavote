@@ -80,10 +80,15 @@ curve and the grid mostly encoded the calendar. Its replacements:
   unavailable until `data/site_schedules.json` has hours; see that file's
   header for the resolution order (per-site-per-date -> per-date ->
   per-site-weekday -> weekday).
-- `SiteMap` — sites on the real county boundary, oval **area**
-  proportional to the chosen metric. The per-day/total toggle is the
-  point: sites open on different dates, so a raw total mostly measures
-  how long a site was open.
+- `SiteMap` — sites on the real county boundary, circle **area**
+  proportional to the chosen metric (circles, not ovals: a fixed aspect
+  distorted the area encoding for no analytical gain). Two views. *Whole
+  cycle* has a per-day/total toggle, which is the point — sites open on
+  different dates, so a raw total mostly measures how long a site was
+  open. *Day by day* scrubs or plays through the cycle; its circle scale
+  is fixed across all days, never per frame, or the surge would vanish.
+  A site that has not opened is a dashed hollow ring, never a zero-radius
+  circle: "not open" and "nobody came" must not look the same.
 
 **Typography**: Fraunces (soft serif) for headings, Source Sans 3
 (humanist) for body, IBM Plex Mono reserved for genuinely tabular figures.
@@ -137,6 +142,16 @@ county site for other published reports.
 current one so a renamed site joins across cycles. Providence Community
 Center -> Jim Scott Community Center is the live example. The build errors
 if a single cycle ever lists both.
+
+**Weather** (`data/weather.json`, from `scripts/fetch_weather.py`) is one
+observation per day at the county centroid — not per site. Early voting
+spans ~25 miles and the weather that plausibly moves turnout is regional,
+so a county-level series is both honest and sufficient. Open-Meteo's ERA5
+archive, free and key-less. `wet` (>=0.25in) and `snowy` are precomputed
+so the UI doesn't re-derive that judgement. It appears in the map
+scrubber, the grid read-out and the full table. The fetch window must run
+*past* Election Day — reports carry post-election rows while late mail
+arrives (2023 has rows through 11/13).
 
 ## Known data problems
 
