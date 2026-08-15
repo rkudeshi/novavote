@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '5.1';
+export const VERSION = '5.2';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,22 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '5.1',
+    v: '5.2',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Motion, animated weather, and a mobile layout that fits',
+    notes: [
+      'Fixed the layout overflowing the screen on phones — the overview card and its bars ran past the right edge.',
+      'Bars grow from nothing as they come into view, and headline percentages count up.',
+      'The home page headline assembles word by word under its number.',
+      'Weather is now drawn rather than emoji: rain actually falls, snow drifts, and a dry day is a quiet ring.',
+      'Segment labels are decided by measured pixels, so nothing clips mid-word at any width.',
+      'Every animation resolves instantly for visitors who ask for reduced motion.',
+    ],
+  },
+  {
+    v: '5.1',
+    commit: '9e709ed0b857da4e8c330a13ed927c39c278c238',
     date: 'August 2026',
     headline: 'Treemaps, calmer sections, percentages first',
     notes: [

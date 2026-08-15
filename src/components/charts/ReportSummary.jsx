@@ -13,14 +13,14 @@
 ------------------------------------------------------------------ */
 import { fmt, pct } from '../../lib/format.js';
 import { isComplete, methodTotals } from '../../lib/derive.js';
+import { useCountUp, useInView, useWidth } from '../../lib/motion.js';
 
 const NEUTRAL = 'var(--line-strong)';
-/* Below this width a segment cannot hold its own text, so the label is
-   rendered under the bar, anchored to the segment's centre. */
-const INSIDE_MIN = 12;
-/* A subgroup narrower than this can hold a number but not a name; the
-   name is carried by the caption row under the bar instead. */
-const SUB_NAME_MIN = 30;
+/* Thresholds in *pixels*, measured against the real bar. A percentage
+   threshold is the same number on a 1000px bar and a 350px one, which is
+   how "Returned by drop box" ended up clipped mid-word on a phone. */
+const PX_NAME = 112;   // room for "Name 15%"
+const PX_PCT = 44;     // room for "15%" alone
 
 /**
  * A headline figure. The share leads and the count follows: "what
@@ -28,12 +28,14 @@ const SUB_NAME_MIN = 30;
  * raw count is scale-dependent — 137,221 means nothing without knowing
  * Fairfax has 810,000 voters.
  */
-function Stat({ label, share, value, of, accent }) {
+function Stat({ label, share, value, of, accent, delay = 0 }) {
+  const [ref, inView] = useInView({ threshold: 0.4 });
+  const n = useCountUp(share ?? value, inView, 1100 + delay);
   return (
-    <div className="rs-stat">
+    <div className="rs-stat" ref={ref}>
       {accent && <span className="rs-stat-rule" style={{ background: accent }} />}
       <div className="rs-stat-k">{label}</div>
-      <div className="rs-stat-v">{share == null ? fmt(value) : pct(share)}</div>
+      <div className="rs-stat-v">{share == null ? fmt(Math.round(n)) : pct(n)}</div>
       <div className="rs-stat-s">
         <b>{fmt(value)}</b> {of}
       </div>
@@ -48,11 +50,12 @@ function Stat({ label, share, value, of, accent }) {
  * in-person voting.
  */
 function Bar({ title, total, totalLabel, parts, note }) {
+  const [ref, w] = useWidth();
+  const [seen, inView] = useInView({ threshold: 0.3 });
   const outside = [];
-  let acc = 0;
 
   return (
-    <div className="rs-flow">
+    <div className="rs-flow" ref={seen}>
       <div className="rs-flow-head">
         <h3 className="rs-flow-title">{title}</h3>
         <div className="rs-flow-total">
@@ -62,26 +65,32 @@ function Bar({ title, total, totalLabel, parts, note }) {
 
       <div
         className="rs-bar"
+        ref={ref}
         role="img"
         aria-label={parts
           .map((p) => `${p.label}: ${fmt(p.value)}, ${pct((p.value / total) * 100)}`)
           .join('; ')}
       >
-        {parts.map((p) => {
+        {parts.map((p, i) => {
           const share = (p.value / total) * 100;
-          const mid = acc + share / 2;
-          acc += share;
-          if (share < INSIDE_MIN) outside.push({ ...p, share, mid });
+          const px = (share / 100) * w;
+          if (px < PX_PCT) outside.push({ ...p, share });
           return (
             <div
               key={p.key}
               className="rs-seg"
-              style={{ width: `${share}%`, background: p.color }}
+              style={{
+                /* Grows from nothing on first sight. The stagger reads
+                   left to right, which is the order the bar is read in. */
+                width: inView ? `${share}%` : '0%',
+                background: p.color,
+                transitionDelay: `${i * 90}ms`,
+              }}
               title={`${p.label}: ${fmt(p.value)} (${pct(share)})`}
             >
-              {share >= INSIDE_MIN && (
+              {px >= PX_PCT && (
                 <span className={`rs-seg-in ${p.dark ? 'on-dark' : ''}`}>
-                  {p.label} <i>{pct(share)}</i>
+                  {px >= PX_NAME && p.label} <i>{pct(share)}</i>
                 </span>
               )}
             </div>
@@ -89,9 +98,8 @@ function Bar({ title, total, totalLabel, parts, note }) {
         })}
       </div>
 
-      {/* Slivers cannot hold their own text. Their labels wrap in a row
-          directly under the bar rather than being pinned to the segment
-          centre, which collided as soon as two slivers sat side by side. */}
+      {/* Slivers cannot hold their own text; their labels wrap in a row
+          directly under the bar. */}
       {outside.length > 0 && (
         <div className="rs-out">
           {outside.map((p) => (
@@ -110,19 +118,29 @@ function Bar({ title, total, totalLabel, parts, note }) {
             const share = (p.value / total) * 100;
             if (!p.sub) return <div key={p.key} style={{ width: `${share}%` }} />;
             return (
-              <div key={p.key} className="rs-subwrap" style={{ width: `${share}%` }}>
-                {p.sub.map((s) => {
-                  const w = (s.value / p.value) * 100;
+              <div
+                key={p.key}
+                className="rs-subwrap"
+                style={{
+                  width: inView ? `${share}%` : '0%',
+                  transitionDelay: `${parts.length * 90}ms`,
+                }}
+              >
+                {p.sub.map((sb) => {
+                  const sw = (sb.value / p.value) * 100;
+                  const spx = (sw / 100) * (share / 100) * w;
                   return (
                     <div
-                      key={s.key}
+                      key={sb.key}
                       className="rs-subseg"
-                      style={{ width: `${w}%`, background: s.color }}
-                      title={`${s.label}: ${fmt(s.value)}`}
+                      style={{ width: `${sw}%`, background: sb.color }}
+                      title={`${sb.label}: ${fmt(sb.value)}`}
                     >
-                      <span className={`rs-subseg-in ${s.dark ? 'on-dark' : ''}`}>
-                        {w >= SUB_NAME_MIN ? `${s.label} ${pct(w)}` : pct(w)}
-                      </span>
+                      {spx >= PX_PCT && (
+                        <span className={`rs-subseg-in ${sb.dark ? 'on-dark' : ''}`}>
+                          {spx >= PX_NAME ? `${sb.label} ${pct(sw)}` : pct(sw)}
+                        </span>
+                      )}
                     </div>
                   );
                 })}

@@ -19,6 +19,7 @@ import boundary from '../../data/fairfax-boundary.json';
 import { fmt, longDate, pct } from '../../lib/format.js';
 import { siteStats } from '../../lib/derive.js';
 import { useInView, prefersReducedMotion } from '../../lib/motion.js';
+import WeatherIcon from '../WeatherIcon.jsx';
 
 const METRICS = [
   { key: 'perDay', label: 'Ballots per day open', unit: 'per day' },
@@ -182,7 +183,7 @@ export default function SiteMap({ ds }) {
             </span>
             {wx && (
               <span className={`wx ${wx.wet ? 'is-wet' : ''} ${wx.snowy ? 'is-snowy' : ''}`}>
-                {wx.snowy ? '❄' : wx.wet ? '☔' : '○'} {wx.label},{' '}
+                <WeatherIcon wet={wx.wet} snowy={wx.snowy} /> {wx.label},{' '}
                 {Math.round(wx.tempMax)}°/{Math.round(wx.tempMin)}°F
                 {wx.precip >= 0.01 ? ` · ${wx.precip.toFixed(2)}″` : ''}
               </span>

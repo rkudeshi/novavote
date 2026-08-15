@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 import { dayOfWeek, fmt, isWeekend, longDate, shortDate } from '../../lib/format.js';
 import { earlyTotal, siteDeviation } from '../../lib/derive.js';
 import { useInView } from '../../lib/motion.js';
+import WeatherIcon from '../WeatherIcon.jsx';
 
 /* Compact formatters — cells are ~40px wide, so "12,112" has to become
    "12.1k" rather than overflow or get clipped. */
@@ -308,7 +309,7 @@ export default function SiteRhythm({ ds }) {
                   </span>
                   {hover.cell.weather && (
                     <span className={`wx ${hover.cell.weather.wet ? 'is-wet' : ''} ${hover.cell.weather.snowy ? 'is-snowy' : ''}`}>
-                      {hover.cell.weather.snowy ? '❄' : hover.cell.weather.wet ? '☔' : '○'}{' '}
+                      <WeatherIcon wet={hover.cell.weather.wet} snowy={hover.cell.weather.snowy} />{' '}
                       {hover.cell.weather.label},{' '}
                       {Math.round(hover.cell.weather.tempMax)}°/
                       {Math.round(hover.cell.weather.tempMin)}°F
