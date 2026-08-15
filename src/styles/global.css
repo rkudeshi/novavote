@@ -6,7 +6,7 @@
    document, so the margin showed through as a frame. Painting html/body
    directly (below) is the fix — keep it that way.
 ------------------------------------------------------------------ */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import './fonts.css';
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -61,8 +61,13 @@ html, body, #root {
   /* brand accent — chrome only, never a data series */
   --brand: #B4741A;
 
-  --font-display: 'Space Grotesk', system-ui, sans-serif;
-  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  /* Fraunces is a soft, high-personality serif — the headline voice.
+     Source Sans 3 is humanist rather than geometric, so body copy reads
+     warm instead of technical. Mono is now reserved for genuinely
+     tabular figures; labels use the body face with tracking, which was
+     most of what made the old set feel mechanical. */
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Source Sans 3', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   --maxw: 1180px;
@@ -74,7 +79,7 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -95,9 +100,10 @@ button { font: inherit; cursor: pointer; }
 .section + .section { border-top: 1px solid var(--line); }
 
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: .14em;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: .13em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -105,21 +111,23 @@ button { font: inherit; cursor: pointer; }
 .h1 {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(32px, 5.2vw, 62px);
-  line-height: 1.04;
-  letter-spacing: -.03em;
+  font-size: clamp(31px, 5vw, 58px);
+  line-height: 1.06;
+  letter-spacing: -.018em;
+  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 110;
 }
 .h2 {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: clamp(21px, 2.6vw, 30px);
-  letter-spacing: -.022em;
+  letter-spacing: -.012em;
+  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 40;
 }
 .h3 {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -.01em;
+  font-size: 16.5px;
+  letter-spacing: -.005em;
 }
 .lede {
   font-size: clamp(16px, 1.5vw, 18.5px);

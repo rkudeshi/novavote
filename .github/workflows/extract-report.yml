@@ -16,6 +16,7 @@ on:
       - 'scripts/parse_report.py'
       - 'scripts/find_reports.py'
       - 'scripts/fetch_boundary.py'
+      - 'scripts/fetch_fonts.py'
       - '.github/workflows/extract-report.yml'
   workflow_dispatch:
 
@@ -31,6 +32,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install pdfplumber pyshp
+
+      - name: Fetch and self-host webfonts
+        run: python scripts/fetch_fonts.py
 
       - name: Fetch county boundary
         run: python scripts/fetch_boundary.py
@@ -66,10 +70,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/parsed src/data/fairfax-boundary.json
+          git add data/parsed src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
           if git diff --staged --quiet; then
             echo "no CSV changes"
           else
-            git commit -m "Parse AB report PDFs into CSVs [skip ci]"
+            git commit -m "Refresh generated assets: report CSVs, boundary, fonts [skip ci]"
             git push origin HEAD:${{ github.ref_name }}
           fi
