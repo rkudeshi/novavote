@@ -73,7 +73,7 @@ function ElectionIndex({ all }) {
                   <span>early ballots</span>
                 </span>
                 <span className="el-stat">
-                  <b>{pct(s.closing7, 0)}</b>
+                  <b>{pct(s.closing7)}</b>
                   <span>final week</span>
                 </span>
                 <span className="el-stat">

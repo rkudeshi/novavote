@@ -22,13 +22,21 @@ const INSIDE_MIN = 12;
    name is carried by the caption row under the bar instead. */
 const SUB_NAME_MIN = 30;
 
-function Stat({ label, value, sub, accent }) {
+/**
+ * A headline figure. The share leads and the count follows: "what
+ * fraction of the electorate did this" is the comparable fact, and the
+ * raw count is scale-dependent — 137,221 means nothing without knowing
+ * Fairfax has 810,000 voters.
+ */
+function Stat({ label, share, value, of, accent }) {
   return (
     <div className="rs-stat">
       {accent && <span className="rs-stat-rule" style={{ background: accent }} />}
       <div className="rs-stat-k">{label}</div>
-      <div className="rs-stat-v">{fmt(value)}</div>
-      {sub && <div className="rs-stat-s">{sub}</div>}
+      <div className="rs-stat-v">{share == null ? fmt(value) : pct(share)}</div>
+      <div className="rs-stat-s">
+        <b>{fmt(value)}</b> {of}
+      </div>
     </div>
   );
 }
@@ -56,7 +64,7 @@ function Bar({ title, total, totalLabel, parts, note }) {
         className="rs-bar"
         role="img"
         aria-label={parts
-          .map((p) => `${p.label}: ${fmt(p.value)}, ${pct((p.value / total) * 100, 1)}`)
+          .map((p) => `${p.label}: ${fmt(p.value)}, ${pct((p.value / total) * 100)}`)
           .join('; ')}
       >
         {parts.map((p) => {
@@ -69,12 +77,11 @@ function Bar({ title, total, totalLabel, parts, note }) {
               key={p.key}
               className="rs-seg"
               style={{ width: `${share}%`, background: p.color }}
-              title={`${p.label}: ${fmt(p.value)} (${pct(share, 1)})`}
+              title={`${p.label}: ${fmt(p.value)} (${pct(share)})`}
             >
               {share >= INSIDE_MIN && (
                 <span className={`rs-seg-in ${p.dark ? 'on-dark' : ''}`}>
-                  <b>{p.label}</b>
-                  <i>{fmt(p.value)} · {pct(share, 1)}</i>
+                  {p.label} <i>{pct(share)}</i>
                 </span>
               )}
             </div>
@@ -90,7 +97,7 @@ function Bar({ title, total, totalLabel, parts, note }) {
           {outside.map((p) => (
             <span key={p.key} className="rs-out-lbl">
               <span className="rs-out-dot" style={{ background: p.color }} />
-              {p.label} · {fmt(p.value)} · {pct(p.share, 1)}
+              {p.label} <i>{pct(p.share)}</i>
             </span>
           ))}
         </div>
@@ -114,7 +121,7 @@ function Bar({ title, total, totalLabel, parts, note }) {
                       title={`${s.label}: ${fmt(s.value)}`}
                     >
                       <span className={`rs-subseg-in ${s.dark ? 'on-dark' : ''}`}>
-                        {w >= SUB_NAME_MIN ? `${s.label} · ${fmt(s.value)}` : fmt(s.value)}
+                        {w >= SUB_NAME_MIN ? `${s.label} ${pct(w)}` : pct(w)}
                       </span>
                     </div>
                   );
@@ -145,44 +152,34 @@ export default function ReportSummary({ ds }) {
     <div className="rs">
       <div className="rs-stats">
         <Stat
-          label="Early ballots cast"
+          label="Voted early"
+          share={reg ? (m.early / reg) * 100 : null}
           value={m.early}
-          sub={reg ? `${pct((m.early / reg) * 100, 2)} of registered voters` : 'all methods'}
+          of={reg ? `of ${fmt(reg)} registered voters` : 'early ballots, all methods'}
           accent="var(--ink)"
-          wide
         />
         <Stat
           label="Early in person"
+          share={(m.inPerson / m.early) * 100}
           value={m.inPerson}
-          sub={`${pct((m.inPerson / m.early) * 100, 1)} of early ballots`}
+          of={`of ${fmt(m.early)} early ballots`}
           accent="var(--s1)"
         />
         <Stat
           label="Vote by mail"
+          share={(m.vbm / m.early) * 100}
           value={m.vbm}
-          sub={`${pct((m.vbm / m.early) * 100, 1)} of early ballots`}
+          of={`of ${fmt(m.early)} early ballots`}
           accent="var(--s2)"
         />
         <Stat
-          label="Ballots issued by mail"
-          value={t.ballotsMailed}
-          sub={reg ? `${pct((t.ballotsMailed / reg) * 100, 1)} of registered voters` : null}
+          label="Mail ballots returned"
+          share={t.ballotsMailed ? (m.vbm / t.ballotsMailed) * 100 : null}
+          value={m.vbm}
+          of={`of ${fmt(t.ballotsMailed)} issued by mail`}
           accent={NEUTRAL}
         />
       </div>
-
-      {reg && (
-        <Bar
-          title="Share of the electorate voting early"
-          total={reg}
-          totalLabel="registered voters"
-          parts={[
-            { key: 'early', label: 'Voted early', value: m.early, color: 'var(--s1)', dark: true },
-            { key: 'not', label: 'Did not vote early', value: reg - m.early, color: NEUTRAL },
-          ]}
-          note="Election Day ballots are not counted here, so this is not total turnout."
-        />
-      )}
 
       <Bar
         title="How the early vote was cast"

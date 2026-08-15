@@ -290,6 +290,17 @@ references to source PDFs or upstream publishers in user-facing text.
 Provenance belongs in code comments and this file. A section blurb should
 say what the reader is looking at and what it is a share of, then stop.
 
+**Percentages follow magnitude.** `pct()` in `src/lib/format.js` prints
+no decimal at or above 10% and one below it — a tenth is noise on "68%"
+but load-bearing on "6.4%". Pass an explicit `digits` only to override.
+
+**Site turnout is a treemap** (`Treemap.jsx`, squarified). Tiles fill the
+box with no gaps so areas are compared adjacently; a loose grid of
+free-standing squares made the reader estimate across whitespace. Tile
+colour is a sequential ramp walked **monotonically by rank** — cycling it
+put the darkest colour back on a small site — and label colour is derived
+from the fill's luminance, never from rank.
+
 **Labels live on the mark.** Bars and squares carry their own name, count
 and share inside the shape; a shape too small for text gets a direct
 label immediately beneath its own chart, never a detached legend.

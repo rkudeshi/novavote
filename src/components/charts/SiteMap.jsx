@@ -268,7 +268,7 @@ export default function SiteMap({ ds }) {
                   <b>{fmt(Math.round(hover.perDay))}</b> ballots/day ·{' '}
                   <b>{fmt(hover.total)}</b> total · {hover.openDays} day
                   {hover.openDays === 1 ? '' : 's'} open ·{' '}
-                  {pct(hover.shareOfInPerson, 1)} of the county's in-person vote
+                  {pct(hover.shareOfInPerson)} of the county's in-person vote
                 </>
               )}
             </span>

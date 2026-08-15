@@ -1,7 +1,20 @@
 export const fmt = (n) => (n == null ? '—' : n.toLocaleString('en-US'));
 
-export const pct = (n, digits = 1) =>
-  n == null || !isFinite(n) ? '—' : `${n.toFixed(digits)}%`;
+/**
+ * Percentages, with precision that follows magnitude.
+ *
+ * At or above 10% a tenth is noise — "68.1%" and "68%" carry the same
+ * meaning and the decimal only adds width. Below 10% the tenth is doing
+ * real work: 6.4% and 6% are visibly different shares, and small site
+ * shares would otherwise collapse into a handful of identical integers.
+ *
+ * Pass `digits` explicitly to override (0 forces whole numbers).
+ */
+export const pct = (n, digits) => {
+  if (n == null || !isFinite(n)) return '—';
+  const d = digits != null ? digits : Math.abs(n) >= 10 ? 0 : 1;
+  return `${n.toFixed(d)}%`;
+};
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 

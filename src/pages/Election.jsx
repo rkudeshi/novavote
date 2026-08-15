@@ -11,7 +11,33 @@ import SurgeChart from '../components/charts/SurgeChart.jsx';
 import SiteRhythm from '../components/charts/SiteRhythm.jsx';
 import SiteMap from '../components/charts/SiteMap.jsx';
 import ReportSummary from '../components/charts/ReportSummary.jsx';
-import Squares from '../components/charts/Squares.jsx';
+import Treemap from '../components/charts/Treemap.jsx';
+
+/* Sequential ramp for the site treemap — sites are ranked by size, so a
+   single hue stepped light-to-dark encodes that order; a categorical
+   palette would imply sixteen unrelated kinds of thing. */
+const SITE_RAMP = [
+  '#0d366b', '#164a8c', '#1c5cab', '#2a78d6', '#4a8ce0', '#6da8ea',
+  '#8fbef1', '#b3d4f7', '#cde2fb',
+];
+
+/**
+ * Sites coloured by rank, darkest = busiest.
+ *
+ * The ramp is walked monotonically rather than cycled: repeating it
+ * would put the darkest colour back on a small site and break the
+ * light-to-dark reading that makes the ramp worth having at all.
+ */
+function rankedSites(ds) {
+  const sorted = [...ds.sites].sort((a, b) => b.total - a.total);
+  const last = Math.max(1, sorted.length - 1);
+  return sorted.map((site, i) => ({
+    key: site.key,
+    label: site.label,
+    value: site.total,
+    color: SITE_RAMP[Math.round((i / last) * (SITE_RAMP.length - 1))],
+  }));
+}
 
 const METHODS = [
   { key: 'inPerson', label: 'Early in person', color: 'var(--s1)', hex: '#2a78d6' },
@@ -36,7 +62,7 @@ export default function Election({ ds, all }) {
             {fmt(s.early)} early ballots across {s.votingDays} voting days and{' '}
             {ds.sites.length} in-person site{ds.sites.length === 1 ? '' : 's'}.
             {s.complete
-              ? ` ${pct(s.closing7, 0)} arrived in the final week.`
+              ? ` ${pct(s.closing7)} arrived in the final week.`
               : ' Coverage stops before Election Day — see the note below.'}
           </p>
 
@@ -58,9 +84,7 @@ export default function Election({ ds, all }) {
 
       <section className="section">
         <div className="wrap">
-          <h2 className="h2" style={{ marginBottom: 22 }}>
-            Every headline figure
-          </h2>
+          <h2 className="h2" style={{ marginBottom: 22 }}>Overview</h2>
           <div className="card">
             <ReportSummary ds={ds} />
           </div>
@@ -72,20 +96,13 @@ export default function Election({ ds, all }) {
           <div className="wrap">
             <h2 className="h2" style={{ marginBottom: 8 }}>Early in-person votes</h2>
             <p className="note" style={{ marginBottom: 22 }}>
-              Square area is proportional to ballots cast at that site.
+              Tile area is proportional to ballots cast at that site.
             </p>
             <div className="card">
-              <Squares
-                items={[...ds.sites]
-                  .sort((a, b) => b.total - a.total)
-                  .map((site) => ({
-                    key: site.key,
-                    label: site.label,
-                    value: site.total,
-                    color: 'var(--s1)',
-                    dark: true,
-                  }))}
+              <Treemap
+                items={rankedSites(ds)}
                 total={ds.totals.inPerson}
+                height={420}
               />
             </div>
           </div>
@@ -96,10 +113,10 @@ export default function Election({ ds, all }) {
         <div className="wrap">
           <h2 className="h2" style={{ marginBottom: 8 }}>Vote by mail</h2>
           <p className="note" style={{ marginBottom: 22 }}>
-            Square area is proportional to ballots returned by that route.
+            Tile area is proportional to ballots returned by that route.
           </p>
           <div className="card">
-            <Squares
+            <Treemap
               items={[
                 {
                   key: 'mail', label: 'Returned by mail', value: ds.totals.returnedMail,
@@ -107,9 +124,10 @@ export default function Election({ ds, all }) {
                 },
                 {
                   key: 'box', label: 'Returned by drop box', value: ds.totals.returnedDropbox,
-                  color: 'var(--s3)',
+                  color: 'var(--s3)', dark: true,
                 },
               ]}
+              height={200}
             />
           </div>
         </div>

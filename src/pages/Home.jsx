@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { DATASETS } from '../data/generated/index.js';
 import { JURISDICTIONS, NOV2025 } from '../data/jurisdictions.js';
 import { Link } from '../lib/router.jsx';
-import { fmt, pct, shortDate } from '../lib/format.js';
+import { fmt, longDate, pct, shortDate } from '../lib/format.js';
 import { byRecency, methodTotals, summary } from '../lib/derive.js';
 import { useCountUp, useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
@@ -31,6 +31,7 @@ export default function Home() {
   return (
     <>
       <Hero />
+      <KeyNumbers />
       <Jurisdictions />
 
       <section className="section">
@@ -110,6 +111,74 @@ function Hero() {
   );
 }
 
+/**
+ * Key numbers across everything currently reporting.
+ *
+ * These are the facts that need no chart: how concentrated the vote was
+ * at the end, when the single busiest day fell, how many mail ballots
+ * actually came back, and how much in-person capacity was open.
+ */
+function KeyNumbers() {
+  const rows = JURISDICTIONS.filter((j) => j.total != null);
+  if (!rows.length) return null;
+
+  const peak = rows.reduce((a, j) => (!a || j.peak.value > a.peak.value ? j : a), null);
+  const closing = rows.filter((j) => j.closing7 != null);
+  const mail = rows.filter((j) => j.mailReturn != null);
+  const sites = rows.reduce((s, j) => s + (j.sites || 0), 0);
+
+  const avg = (list, key) =>
+    list.reduce((s, j) => s + j[key], 0) / list.length;
+
+  return (
+    <section className="section" style={{ paddingTop: 0 }}>
+      <div className="wrap">
+        <div className="keys">
+          {NOV2025.turnout != null && (
+            <Key
+              v={pct(NOV2025.turnout)}
+              k="Voted early"
+              s={`of ${fmt(NOV2025.totals.registered)} registered voters`}
+            />
+          )}
+          {closing.length > 0 && (
+            <Key
+              v={pct(avg(closing, 'closing7'))}
+              k="Cast in the final week"
+              s="of the early vote"
+            />
+          )}
+          {peak && (
+            <Key
+              v={fmt(peak.peak.value)}
+              k="Busiest single day"
+              s={longDate(peak.peak.date)}
+            />
+          )}
+          {mail.length > 0 && (
+            <Key
+              v={pct(avg(mail, 'mailReturn'))}
+              k="Mail ballots returned"
+              s="of those issued"
+            />
+          )}
+          <Key v={String(sites)} k="In-person sites" s="open at some point" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Key({ v, k, s }) {
+  return (
+    <div className="key">
+      <div className="key-v">{v}</div>
+      <div className="key-k">{k}</div>
+      <div className="key-s">{s}</div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------
    Jurisdiction comparison — the lead of the page.
 
@@ -130,9 +199,11 @@ function Jurisdictions() {
         <h2 className="h2" style={{ marginBottom: 8 }}>
           Early voting by jurisdiction
         </h2>
-        <p className="note" style={{ marginBottom: 26 }}>
+        <p className="note" style={{ marginBottom: 20 }}>
           November 2025 general election. Bar length is total early ballots;
-          the split shows how they were cast.
+          the split shows how they were cast. The last column is early ballots
+          as a share of registered voters, which compares jurisdictions of
+          different sizes on equal footing.
         </p>
 
         <div className="jur">
@@ -161,9 +232,19 @@ function Jurisdictions() {
                 <div className="jur-figs">
                   <b>{fmt(j.total)}</b>
                   <span className="jur-split">
-                    <i className="jur-dot" /> {pct(ipShare, 0)} in person
-                    <i className="jur-dot is-vbm" /> {pct(100 - ipShare, 0)} by mail
+                    <i className="jur-dot" /> {pct(ipShare)} in person
+                    <i className="jur-dot is-vbm" /> {pct(100 - ipShare)} by mail
                   </span>
+                </div>
+                <div className="jur-turnout">
+                  {j.turnout == null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <>
+                      <b>{pct(j.turnout)}</b>
+                      <span>of {fmt(j.registered)} voters</span>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -228,7 +309,7 @@ function CycleCard({ ds, delay }) {
         </div>
         <div>
           <dt>In person</dt>
-          <dd>{pct((m.inPerson / m.early) * 100, 0)}</dd>
+          <dd>{pct((m.inPerson / m.early) * 100)}</dd>
         </div>
         <div>
           <dt>{s.complete ? 'Sites' : 'Through'}</dt>
