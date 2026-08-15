@@ -1,4 +1,5 @@
 import { Link, useRouter } from '../lib/router.jsx';
+import { VERSION } from '../version.js';
 
 export function Header() {
   const { path } = useRouter();
@@ -74,6 +75,14 @@ export function Footer({ sources = [] }) {
             Every daily series and every early-voting site column is summed and
             checked against the totals the county publishes in the same report.
             A figure that doesn't reconcile fails the build rather than shipping.
+          </p>
+        </div>
+        <div>
+          <div className="ftr-h">This build</div>
+          <p>
+            NovaVote <strong>v{VERSION}</strong>. Every previous version stays
+            browsable as a frozen build —{' '}
+            <Link to="/versions" className="ftr-link">see the archive</Link>.
           </p>
         </div>
         <div>

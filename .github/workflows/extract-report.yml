@@ -17,6 +17,8 @@ on:
       - 'scripts/find_reports.py'
       - 'scripts/fetch_boundary.py'
       - 'scripts/fetch_fonts.py'
+      - 'scripts/geocode_sites.py'
+      - 'data/site_locations.json'
       - '.github/workflows/extract-report.yml'
   workflow_dispatch:
 
@@ -35,6 +37,13 @@ jobs:
 
       - name: Fetch and self-host webfonts
         run: python scripts/fetch_fonts.py
+
+      - name: Geocode early voting sites
+        # Non-blocking: an address the geocoders can't resolve must not stop
+        # the report parsing below. gen-data.mjs refuses to build a site with
+        # no coordinate, so a miss still can't ship.
+        continue-on-error: true
+        run: python scripts/geocode_sites.py
 
       - name: Fetch county boundary
         run: python scripts/fetch_boundary.py
@@ -65,15 +74,32 @@ jobs:
             pdf-extract/
             data/parsed/
 
-      - name: Commit parsed CSVs
-        if: success()
+      - name: Commit generated data
         run: |
+          set -u
+          BRANCH="${{ github.ref_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/parsed src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
+          git add data/parsed data/site_locations.json src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
           if git diff --staged --quiet; then
-            echo "no CSV changes"
-          else
-            git commit -m "Refresh generated assets: report CSVs, boundary, fonts [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
+            echo "nothing to commit"
+            exit 0
           fi
+          git commit -m "Refresh generated assets: report CSVs, geocodes, boundary, fonts [skip ci]"
+
+          # This job takes ~30s, which is long enough for a human push to land
+          # on the same branch first. Without this the push is rejected as
+          # non-fast-forward and the generated data is silently thrown away —
+          # which is exactly what happened twice before this loop existed.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$BRANCH"; then
+              echo "pushed on attempt $attempt"
+              exit 0
+            fi
+            echo "push rejected; rebasing onto origin/$BRANCH and retrying"
+            git fetch origin "$BRANCH"
+            git rebase "origin/$BRANCH" || { git rebase --abort; echo "rebase failed"; exit 1; }
+            sleep $((attempt * 3))
+          done
+          echo "could not push after 3 attempts"
+          exit 1

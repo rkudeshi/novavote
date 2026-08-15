@@ -155,11 +155,41 @@ derived from them rendered as "100% of ballots were early". If a real
 total-turnout figure is ever sourced, add it under a clearly different
 name.
 
-**Site coordinates are still approximate.** They are hand-stubbed, and now
-plotted on a real Census boundary, which makes them look more
-authoritative than they are. The build asserts each falls inside the
-county; that catches gross errors, not a building on the wrong block.
-Real geocoding is open work.
+**Site coordinates are geocoded** from the county's published addresses in
+`data/site_locations.json` (fixed in v3.0 — the earlier hand-stubbed
+coordinates were off by up to ~2.7km, e.g. Thomas Jefferson and Mt.
+Vernon). `scripts/geocode_sites.py` tries the Census geocoder first —
+same reference frame as the boundary geometry — and falls back to
+Nominatim for addresses missing from Census range files (Jim Scott and
+Sully). It records `geocodeSource` per site, rejects a result outside
+Fairfax's bounding box rather than accepting a ZIP-centroid fallback, and
+`gen-data.mjs` refuses to build a site with no coordinate at all. Never
+hand-edit lat/lon: edit the address and re-run the geocoder, so every
+coordinate traces to a real address.
+
+## Versioning
+
+`src/version.js` is the single source of truth. Policy: a **significant**
+change bumps the major (2.x -> 3.0), a **smaller** change bumps the minor
+(3.0 -> 3.1). The current version shows in the footer.
+
+Past releases are archived as **real builds of the commit they shipped
+from**, served at `/versions/<v>/`. `deploy.yml` reads the list out of
+`version.js`, checks out each commit in a git worktree, and builds it with
+`--base /novavote/versions/<v>/`. They are genuine frozen snapshots: an
+archived version cannot be broken by a later refactor, needs no CSS
+scoping against the current app, and shows the data as it stood then.
+
+Pinned by commit rather than git tag because this project's CI credentials
+can push branches but not tags (a tag push returns HTTP 403). The workflow
+checks out whatever ref `commit` names, so tags can replace SHAs later with
+no other change.
+
+An archive that fails to build is skipped with a log line; the current site
+still deploys.
+
+To cut a release: bump `VERSION`, add an entry with the merge commit SHA,
+merge.
 
 ## Automation
 
