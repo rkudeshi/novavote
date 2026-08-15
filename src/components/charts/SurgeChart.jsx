@@ -279,7 +279,7 @@ export default function SurgeChart({
               <span key={s.id} className="surge-read-item">
                 <i style={{ background: s.color }} />
                 {s.label} · {longDate(r.date)} · <b>{fmt(r.value)}</b> ballots (
-                {pct(r.share, 1)} of cycle)
+                {pct(r.share)} of cycle)
               </span>
             ))}
           </>

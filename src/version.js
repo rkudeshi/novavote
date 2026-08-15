@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '5.0';
+export const VERSION = '5.1';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,21 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '5.0',
+    v: '5.1',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Treemaps, calmer sections, percentages first',
+    notes: [
+      'Site turnout is now a packed treemap — tiles fill the space with no gaps, so proportions are compared directly rather than across whitespace.',
+      'Headline section is now Overview, and each box leads with its percentage; the count sits underneath.',
+      'Percentages at or above 10% drop the decimal.',
+      'Bars carry one line of text per segment instead of three, and the bar that merely restated a headline box is gone.',
+      'Home page gains a key-numbers strip and an early-turnout column per jurisdiction.',
+    ],
+  },
+  {
+    v: '5.0',
+    commit: 'a36f7b5789c6972bc90504918611751cd5c9d5d2',
     date: 'August 2026',
     headline: 'Northern Virginia at a glance',
     notes: [
