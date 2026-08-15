@@ -73,7 +73,7 @@ jobs:
               # passing --outDir: older releases carry a spa-fallback plugin
               # that writes 404.html to a hardcoded dist/, so redirecting the
               # output breaks them. --base is all that needs overriding.
-              npm run build -- --base "/novavote/versions/$VER/"
+              npm run build -- --base "/versions/$VER/"
             ); then
               mkdir -p "dist/versions/$VER"
               cp -r "$WORK/dist/." "dist/versions/$VER/"
