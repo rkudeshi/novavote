@@ -239,6 +239,17 @@ merge.
 
 ## Automation
 
+**Never write the CI-skip marker literally in a commit message** — the
+bracketed `skip`/`ci` token GitHub recognises. GitHub concatenates a
+branch's commit messages into the body of a squash merge, so the token
+rides onto `main` and suppresses **every** workflow for that push,
+including the Pages deploy. This has bitten twice: once from the extract
+workflow's own commit (now removed), and once from a commit message that
+merely *described* the problem. Refer to it in prose, never as the token.
+A merge that lands green is not proof the site deployed — check that a
+deploy run exists for the merge SHA, and dispatch `deploy.yml` manually if
+not.
+
 `.github/workflows/daily-pull.yml` runs daily and pulls every source
 marked `"active": true` in `data/sources.json`, parses, reconciles and
 commits. It no-ops while nothing is active. To turn on the 2026 cycle:
