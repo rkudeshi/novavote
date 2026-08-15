@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# generated from data/*.csv by scripts/gen-data.mjs — regenerated on every
+# `npm run dev` / `npm run build`, not hand-edited, not committed.
+src/data/generated/
