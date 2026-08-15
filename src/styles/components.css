@@ -421,3 +421,4 @@
   .map-head { padding: 14px 14px 4px; }
   .map-body { padding: 4px 10px 0; }
 }
+.map-address { font-size: 12.5px; color: var(--muted); }

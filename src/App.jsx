@@ -8,8 +8,7 @@ import { fmt, fullDate, pct } from './lib/format.js';
 import { Header, Footer } from './components/Shell.jsx';
 import Home from './pages/Home.jsx';
 import Election from './pages/Election.jsx';
-import Versions, { VERSIONS, VersionFrame } from './pages/Versions.jsx';
-import NovaVoteV1 from './versions/v1/NovaVoteV1.jsx';
+import Versions from './pages/Versions.jsx';
 
 export default function App() {
   return (
@@ -22,21 +21,6 @@ export default function App() {
 function Routes() {
   const { path } = useRouter();
   const all = byRecency(DATASETS);
-
-  /* Archived versions render standalone — they carry their own chrome,
-     and wrapping them in the current header would misrepresent them. */
-  const versionMatch = path.match(/^\/versions\/(.+)$/);
-  if (versionMatch) {
-    const version = VERSIONS.find((v) => v.slug === versionMatch[1]);
-    if (version && version.slug === 'v1') {
-      return (
-        <VersionFrame version={version}>
-          <NovaVoteV1 />
-        </VersionFrame>
-      );
-    }
-    return <Shell all={all}><NotFound /></Shell>;
-  }
 
   let page;
   if (path === '/') page = <Home />;

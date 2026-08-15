@@ -11,13 +11,18 @@ import react from '@vitejs/plugin-react';
  * hack, because the asset URLs in index.html are absolute.
  */
 function spaFallback() {
+  let outDir = 'dist';
   return {
     name: 'novavote-spa-fallback',
     apply: 'build',
+    // Read the resolved outDir rather than assuming dist/: the version
+    // archive builds each tagged release into its own directory.
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
     closeBundle() {
-      const out = path.resolve(__dirname, 'dist');
-      copyFileSync(path.join(out, 'index.html'), path.join(out, '404.html'));
-      console.log('spa-fallback: dist/404.html written');
+      copyFileSync(path.join(outDir, 'index.html'), path.join(outDir, '404.html'));
+      console.log(`spa-fallback: ${path.relative(process.cwd(), outDir)}/404.html written`);
     },
   };
 }

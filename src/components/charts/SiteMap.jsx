@@ -171,10 +171,11 @@ export default function SiteMap({ ds }) {
       <div className="map-read" role="status">
         {hover ? (
           <>
-            <strong>{hover.label}</strong>
+            <strong>{hover.venue || hover.label}</strong>
             {hover.formerly && (
               <span className="map-formerly">formerly {hover.formerly}</span>
             )}
+            {hover.address && <span className="map-address">{hover.address}</span>}
             <span className="map-read-stats">
               <b>{fmt(Math.round(hover.perDay))}</b> ballots/day ·{' '}
               <b>{fmt(hover.total)}</b> total ·{' '}
@@ -186,8 +187,8 @@ export default function SiteMap({ ds }) {
         ) : (
           <span className="muted">
             Hover or tab to any site. Oval area is proportional to{' '}
-            {active.label.toLowerCase()}. Site coordinates are approximate,
-            pending real geocoding.
+            {active.label.toLowerCase()}. Locations are geocoded from the
+            county's published site addresses.
           </span>
         )}
       </div>

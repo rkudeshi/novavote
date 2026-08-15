@@ -113,18 +113,17 @@ const SITE_LABELS = {
   west_springfield: 'West Springfield',
 };
 
-// Approximate, not authoritative — stubbed for a future map view.
-const SITE_COORDS = {
-  government_center: [38.8554, -77.3607], mt_vernon: [38.7293, -77.1043],
-  north_county: [38.9526, -77.3494], burke: [38.7934, -77.2717],
-  centreville: [38.8401, -77.4386], franconia: [38.7712, -77.1524],
-  great_falls: [39.0018, -77.2872], herndon_fortnightly: [38.9696, -77.3861],
-  jim_scott: [38.8676, -77.228], lorton: [38.7009, -77.2278],
-  mason: [38.8462, -77.152], mclean: [38.9343, -77.1775],
-  providence: [38.8807, -77.2264], sully: [38.8879, -77.4344],
-  thomas_jefferson: [38.8462, -77.1861], tysons_pimmit: [38.9021, -77.1936],
-  west_springfield: [38.7743, -77.2158],
-};
+/* Site locations come from data/site_locations.json: real addresses
+   supplied by the county, geocoded by scripts/geocode_sites.py against the
+   Census geocoder — the same reference the boundary geometry comes from,
+   so address and outline agree. A site with no coordinate fails the build
+   rather than being dropped silently from the map. */
+const LOCATIONS = (() => {
+  const file = path.join(ROOT, 'data', 'site_locations.json');
+  if (!existsSync(file)) return {};
+  const doc = JSON.parse(readFileSync(file, 'utf8'));
+  return Object.fromEntries(doc.sites.map((s) => [s.key, s]));
+})();
 
 /* Elections are ordered by recency, not categorical, so they take steps
    of one sequential ramp — newest darkest — rather than arbitrary hues. */
@@ -294,8 +293,12 @@ function buildCycle(cycle) {
       ...(renamed ? { formerly: renamed.formerly } : {}),
       total,
       opened: openRow ? openRow.date : null,
-      lat: SITE_COORDS[k]?.[0] ?? null,
-      lon: SITE_COORDS[k]?.[1] ?? null,
+      lat: LOCATIONS[k]?.lat ?? null,
+      lon: LOCATIONS[k]?.lon ?? null,
+      address: LOCATIONS[k]
+        ? `${LOCATIONS[k].address}, ${LOCATIONS[k].city}, ${LOCATIONS[k].state} ${LOCATIONS[k].zip}`
+        : null,
+      venue: LOCATIONS[k]?.name ?? null,
     };
   })
     // A site the report lists but that recorded nothing in this snapshot
@@ -361,7 +364,10 @@ function checkCoords(datasets) {
   for (const ds of datasets) {
     for (const s of ds.sites) {
       if (s.lat == null || s.lon == null) {
-        throw new Error(`gen-data: ${ds.id} site "${s.key}" has no coordinates`);
+        throw new Error(
+          `gen-data: ${ds.id} site "${s.key}" has no coordinates. Add its address to ` +
+            `data/site_locations.json and run scripts/geocode_sites.py (CI does this).`,
+        );
       }
       if (!county.rings.some((r) => inRing([s.lon, s.lat], r))) {
         throw new Error(

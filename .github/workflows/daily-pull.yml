@@ -42,15 +42,25 @@ jobs:
 
       - name: Commit any new data
         run: |
+          set -u
+          BRANCH="${{ github.ref_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/parsed
           if git diff --staged --quiet; then
             echo "No change in today's report — nothing to commit."
-          else
-            git commit -m "Daily pull: refresh early voting data"
-            git push origin HEAD:${{ github.ref_name }}
+            exit 0
           fi
+          git commit -m "Daily pull: refresh early voting data"
+          # Rebase-and-retry: a push that races another commit on the branch
+          # must not silently discard the day's data.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$BRANCH"; then exit 0; fi
+            git fetch origin "$BRANCH"
+            git rebase "origin/$BRANCH" || { git rebase --abort; exit 1; }
+            sleep $((attempt * 3))
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: failure()
