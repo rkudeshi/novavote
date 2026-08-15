@@ -102,7 +102,12 @@ jobs:
             echo "nothing to commit"
             exit 0
           fi
-          git commit -m "Refresh generated assets: report CSVs, geocodes, boundary, fonts [skip ci]"
+          # No "[skip ci]" here. GitHub concatenates a branch's commit messages
+          # into the body of a squash merge, so that marker would ride along
+          # onto main and silently suppress the deploy for that push — which
+          # is exactly what happened once. Keep this workflow from retriggering
+          # itself via its `paths:` filter instead, which it already does.
+          git commit -m "Refresh generated assets: report CSVs, geocodes, boundary, fonts"
 
           # This job takes ~30s, which is long enough for a human push to land
           # on the same branch first. Without this the push is rejected as
