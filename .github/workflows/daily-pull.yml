@@ -1,0 +1,59 @@
+name: Daily report pull
+
+# Fetches each active source in data/sources.json, parses it into CSVs and
+# commits any change. During early voting the county republishes the same
+# URL each day with one more row, so this keeps the site current without
+# anyone touching it; pushing to main triggers the Pages deploy.
+#
+# Nothing runs until a source is marked "active": true, so this sits idle
+# and harmless between cycles.
+
+on:
+  schedule:
+    # 11:00 UTC — after the county's overnight refresh, before US morning.
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+    inputs:
+      cycle:
+        description: 'Only pull this cycle id (default: every active source)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pull
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pdfplumber
+
+      - name: Pull active sources
+        id: pull
+        run: python scripts/daily_pull.py --only "${{ github.event.inputs.cycle }}"
+
+      - name: Commit any new data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/parsed
+          if git diff --staged --quiet; then
+            echo "No change in today's report — nothing to commit."
+          else
+            git commit -m "Daily pull: refresh early voting data"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: daily-pull-debug
+          path: pdf-extract/

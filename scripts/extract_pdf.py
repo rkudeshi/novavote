@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Download Fairfax County AB Daily Report PDFs and dump their text layer.
+
+This exists because the report is only published as a PDF. Run it in CI (see
+.github/workflows/extract-report.yml) where outbound network is available;
+the raw text lands in the workflow log and as an artifact, which is what
+scripts/build_csvs_*.py transcriptions are built from.
+
+The Nov 2025 report is included deliberately as a control: we already have
+validated CSVs for it, so if a parser reproduces 2025's published grand
+totals from this text, the same approach can be trusted on other cycles.
+"""
+
+import sys
+import urllib.request
+from pathlib import Path
+
+REPORTS = {
+    "nov2025": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB-Daily-Report-Nov2025.pdf",
+    "nov2024": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%209.24.pdf",
+    "nov2023": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/ab%20daily%20report%20november%202023.pdf",
+}
+
+OUT = Path("pdf-extract")
+
+
+def fetch(name, url):
+    dest = OUT / f"{name}.pdf"
+    if dest.exists():
+        return dest
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (NovaVote data fetch)"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        data = r.read()
+    dest.write_bytes(data)
+    print(f"[fetch] {name}: {len(data):,} bytes <- {url}", flush=True)
+    return dest
+
+
+def dump(name, path):
+    import pdfplumber
+
+    text_out = OUT / f"{name}.txt"
+    chunks = []
+    with pdfplumber.open(path) as pdf:
+        print(f"\n{'=' * 78}\n{name}: {len(pdf.pages)} pages\n{'=' * 78}", flush=True)
+        for i, page in enumerate(pdf.pages, 1):
+            header = f"\n----- {name} PAGE {i} -----"
+            body = page.extract_text() or "(no text layer)"
+            print(header, flush=True)
+            print(body, flush=True)
+            chunks.append(header + "\n" + body)
+
+            # Table extraction often recovers column structure the raw text
+            # layer merges together — dump it alongside for cross-checking.
+            for t_i, table in enumerate(page.extract_tables() or [], 1):
+                thead = f"\n----- {name} PAGE {i} TABLE {t_i} -----"
+                trows = "\n".join(
+                    " | ".join("" if c is None else str(c).replace("\n", " ") for c in row)
+                    for row in table
+                )
+                print(thead, flush=True)
+                print(trows, flush=True)
+                chunks.append(thead + "\n" + trows)
+    text_out.write_text("\n".join(chunks), encoding="utf-8")
+
+
+def main():
+    OUT.mkdir(exist_ok=True)
+    names = sys.argv[1:] or list(REPORTS)
+    failures = []
+    for name in names:
+        try:
+            dump(name, fetch(name, REPORTS[name]))
+        except Exception as e:  # keep going so one dead URL doesn't hide the rest
+            print(f"[ERROR] {name}: {type(e).__name__}: {e}", flush=True)
+            failures.append(name)
+    if failures:
+        print(f"\n[FAILED] {', '.join(failures)}", flush=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

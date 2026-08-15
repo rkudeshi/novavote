@@ -1,0 +1,161 @@
+/* ------------------------------------------------------------------
+   NovaVote v2 — light theme foundation
+
+   The white border in v1 came from the browser's default 8px margin on
+   <body>: v1 painted its background on a .nv-root div instead of the
+   document, so the margin showed through as a frame. Painting html/body
+   directly (below) is the fix — keep it that way.
+------------------------------------------------------------------ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  width: 100%;
+}
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --plane: #F7F6F2;          /* page plane — warm paper */
+  --surface: #FFFFFF;        /* card / chart surface */
+  --surface-sunk: #F1EFE9;   /* wells, tracks, table stripes */
+
+  /* ink */
+  --ink: #131A2B;            /* primary */
+  --ink-2: #4A5468;          /* secondary */
+  --muted: #7C879B;          /* axis, meta */
+
+  /* lines */
+  --line: #E4E1D8;
+  --line-strong: #CFCBBE;
+  --ring: rgba(19, 26, 43, 0.10);
+
+  /* data series — colorblind-safety validated as a set against this
+     white surface: worst all-pairs CVD dE 9.2, normal-vision dE 24.0.
+     Drop-box aqua sits at 2.82:1 contrast, under the 3:1 bar, so every
+     chart using it ships direct labels and a table view as relief.
+     Re-validate as a set if any of these three change. */
+  --s1: #2a78d6;             /* early in person */
+  --s2: #eb6834;             /* returned by mail */
+  --s3: #1baf7a;             /* returned by drop box */
+
+  /* sequential blue ramp — elections are ordered by recency, not
+     categorical, so they read light (older) -> dark (newest). */
+  --seq-100: #cde2fb;
+  --seq-250: #86b6ef;
+  --seq-350: #5598e7;
+  --seq-450: #2a78d6;
+  --seq-550: #1c5cab;
+  --seq-700: #0d366b;
+
+  /* diverging pair for above/below-average site behavior */
+  --div-pos: #2a78d6;
+  --div-neg: #eb6834;
+  --div-mid: #EFEDE7;
+
+  /* brand accent — chrome only, never a data series */
+  --brand: #B4741A;
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --maxw: 1180px;
+  --radius: 14px;
+}
+
+body {
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, p, figure { margin: 0; }
+a { color: inherit; }
+button { font: inherit; cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--s1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------------------------- layout ---------------------------- */
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+.section { padding: 64px 0; }
+.section + .section { border-top: 1px solid var(--line); }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(32px, 5.2vw, 62px);
+  line-height: 1.04;
+  letter-spacing: -.03em;
+}
+.h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(21px, 2.6vw, 30px);
+  letter-spacing: -.022em;
+}
+.h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -.01em;
+}
+.lede {
+  font-size: clamp(16px, 1.5vw, 18.5px);
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 64ch;
+}
+.note { font-size: 13.5px; line-height: 1.6; color: var(--muted); max-width: 70ch; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(19,26,43,.04), 0 8px 24px -16px rgba(19,26,43,.18);
+}
+
+.sec-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+/* ---------------------------- motion ---------------------------- */
+@keyframes nv-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+.rise { animation: nv-rise .7s cubic-bezier(.22,.61,.36,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

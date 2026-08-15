@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Report sources for the automated daily pull (.github/workflows/daily-pull.yml).",
+    "Add an entry with \"active\": true once the county publishes the cycle's",
+    "daily report URL, and the scheduled job will fetch, parse, reconcile and",
+    "commit it every morning during early voting. Nothing else needs changing —",
+    "scripts/gen-data.mjs picks the CSVs up from data/parsed/ automatically once",
+    "the cycle is registered in its CYCLES list.",
+    "",
+    "The parse is self-checking: every column is asserted against the grand",
+    "totals the report prints, so a mid-cycle change to the PDF layout fails",
+    "the job instead of committing wrong numbers."
+  ],
+  "sources": [
+    {
+      "cycle": "fairfax-2026-general",
+      "year": 2026,
+      "active": false,
+      "url": "",
+      "note": "URL unknown until Fairfax publishes the Nov 2026 report. Historically the pattern has been https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB-Daily-Report-Nov<YEAR>.pdf — verify before enabling."
+    }
+  ]
+}
