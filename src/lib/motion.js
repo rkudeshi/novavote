@@ -81,3 +81,29 @@ export function useProgress(run, duration = 1600, delay = 0) {
 
   return p;
 }
+
+/**
+ * Element width in pixels, kept current across resizes.
+ *
+ * Layout thresholds ("can this segment hold its own label?") have to be
+ * decided in pixels. A percentage threshold looks right on a desktop bar
+ * and clips words in half on a phone, because the same 15% is 150px in
+ * one place and 53px in the other.
+ */
+export function useWidth() {
+  const ref = useRef(null);
+  const [w, setW] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setW(el.clientWidth || 0);
+    measure();
+    if (!('ResizeObserver' in window)) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return [ref, w];
+}

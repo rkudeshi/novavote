@@ -26,7 +26,7 @@
 }
 
 .kpis {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   gap: 1px; margin-top: 40px;
   background: var(--line); border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden;
@@ -477,10 +477,16 @@
    segment: a 1.9% slice must render 1.9% wide. Slivers get a direct
    label underneath instead.
 ------------------------------------------------------------------ */
-.rs { display: grid; gap: 0; }
+/* minmax(0, 1fr), not the default auto track. A non-wrapping flex row's
+   min-content width is the *sum* of its items' min-content widths, so
+   .rs-bar reports ~396px on a phone and an auto grid track happily grows
+   to fit it, dragging the card past the viewport. Flooring the track at
+   0 lets the bar take the container width and clip its own labels. */
+.rs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.rs-flow { min-width: 0; }
 
 .rs-stats {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
   gap: 1px; background: var(--line);
   border: 1px solid var(--line); border-radius: var(--radius);
   overflow: hidden; margin-bottom: 34px;
@@ -520,9 +526,15 @@
   display: flex; width: 100%; height: 46px; border-radius: 8px;
   overflow: hidden; background: var(--surface-sunk); border: 1px solid var(--line);
 }
+/* min-width: 0 is load-bearing. Flex items default to min-width: auto,
+   so a nowrap label inside a segment sets that segment's floor and the
+   whole bar — and with it the card and the page — grows past the
+   viewport on a phone. The segment must be free to shrink to its
+   percentage and clip its own text. */
 .rs-seg {
   height: 100%; display: flex; align-items: center; justify-content: center;
-  border-right: 1px solid rgba(255, 255, 255, .55); overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, .55);
+  overflow: hidden; min-width: 0;
 }
 .rs-seg:last-child { border-right: 0; }
 .rs-seg-in {
@@ -553,11 +565,12 @@
 .rs-subbar { display: flex; width: 100%; height: 32px; margin-top: 4px; }
 .rs-subwrap {
   display: flex; height: 100%; border-radius: 6px; overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line); min-width: 0;
 }
 .rs-subseg {
   height: 100%; display: flex; align-items: center; justify-content: center;
-  overflow: hidden; border-right: 1px solid rgba(255, 255, 255, .55);
+  overflow: hidden; min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, .55);
 }
 .rs-subseg:last-child { border-right: 0; }
 .rs-subseg-in {
@@ -635,6 +648,15 @@
   .jur-split { justify-content: flex-start; }
   .rs-bar { height: 42px; }
   .rs-seg-in { font-size: 12px; padding: 0 6px; }
+  .rs-subbar { height: 26px; }
+  .rs-subseg-in { font-size: 10px; padding: 0 4px; }
+  .rs-flow-head { gap: 4px 12px; }
+  .rs-flow-title { font-size: 17px; }
+  /* Two boxes across reads better than one tall column at phone widths. */
+  .rs-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rs-stat { padding: 14px 13px 16px; }
+  .rs-stat-v { font-size: 27px; }
+  .keys { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ------------------------- two-line table headers --------------- */
@@ -658,7 +680,7 @@
 
 /* ------------------------- home key numbers --------------------- */
 .keys {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 1px; background: var(--line);
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
 }
@@ -687,4 +709,107 @@
     flex-direction: row; align-items: baseline; gap: 8px;
     text-align: left; border-left: 0; padding-left: 0;
   }
+}
+
+/* ------------------------- animated weather glyph --------------- */
+.wx-icon { flex: none; }
+.wx-cloud { fill: currentColor; opacity: .85; }
+.wx-sun { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: .75; }
+.wx-drop {
+  stroke: currentColor; stroke-width: 1.6; stroke-linecap: round;
+  animation: wx-fall 1.15s linear infinite;
+}
+.wx-flake {
+  stroke: currentColor; stroke-width: 1.3; stroke-linecap: round;
+  transform-origin: center;
+  animation: wx-drift 2.6s ease-in-out infinite;
+}
+
+@keyframes wx-fall {
+  0%   { opacity: 0; transform: translateY(-3px); }
+  25%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes wx-drift {
+  0%   { opacity: 0; transform: translate(0, -3px) rotate(0deg); }
+  30%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(1.5px, 4px) rotate(120deg); }
+}
+
+/* The chip itself carries the colour the glyph inherits. */
+.wx { gap: 7px; }
+.wx.is-wet .wx-icon { color: #1c5cab; }
+.wx.is-snowy .wx-icon { color: #4a3aa7; }
+.wx .wx-icon { color: var(--muted); }
+
+/* ------------------------- motion ------------------------------- */
+.rs-seg, .rs-subwrap {
+  transition: width .95s cubic-bezier(.22,.61,.36,1);
+}
+.tm-rect, .tm-lbl {
+  animation: tm-in .5s cubic-bezier(.22,.61,.36,1) both;
+}
+@keyframes tm-in {
+  from { opacity: 0; transform: scale(.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.tm-rect { transform-origin: center; transform-box: fill-box; }
+
+/* Hero: the headline number gets a slow sheen once it has counted up. */
+.hero-num {
+  background-size: 220% 100%;
+  animation: hero-sheen 9s ease-in-out 1.6s infinite;
+}
+@keyframes hero-sheen {
+  0%, 100% { background-position: 0% 0; }
+  50%      { background-position: 100% 0; }
+}
+
+/* Key numbers and jurisdiction rows rise as they arrive. */
+.key { animation: rise-in .6s cubic-bezier(.22,.61,.36,1) both; }
+.keys .key:nth-child(1) { animation-delay: .04s; }
+.keys .key:nth-child(2) { animation-delay: .12s; }
+.keys .key:nth-child(3) { animation-delay: .2s; }
+.keys .key:nth-child(4) { animation-delay: .28s; }
+.keys .key:nth-child(5) { animation-delay: .36s; }
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.rs-stat { animation: rise-in .55s cubic-bezier(.22,.61,.36,1) both; }
+.rs-stats .rs-stat:nth-child(2) { animation-delay: .07s; }
+.rs-stats .rs-stat:nth-child(3) { animation-delay: .14s; }
+.rs-stats .rs-stat:nth-child(4) { animation-delay: .21s; }
+
+/* Cards lift slightly toward the pointer. */
+.cycle { transition: transform .3s cubic-bezier(.22,.61,.36,1), box-shadow .3s ease; }
+.cycle:hover { transform: translateY(-3px); box-shadow: 0 14px 34px -20px rgba(19,26,43,.45); }
+
+/* Everything above is decoration on a page that reads correctly without
+   it, so under reduced motion it all resolves to its final state. */
+@media (prefers-reduced-motion: reduce) {
+  .wx-drop, .wx-flake, .hero-word,
+  .hero-num, .key, .rs-stat, .tm-rect, .tm-lbl {
+    animation: none !important;
+  }
+  .rs-seg, .rs-subwrap, .cycle, .jur-bar { transition: none !important; }
+}
+
+/* Hero word reveal. inline-block so transform applies; the sentence
+   assembles under the number rather than appearing all at once. */
+.hero-word {
+  display: inline-block;
+  animation: word-in .62s cubic-bezier(.22,.61,.36,1) both;
+}
+@keyframes word-in {
+  from { opacity: 0; transform: translateY(14px) rotate(1.2deg); }
+  to   { opacity: 1; transform: none; }
+}
+.hero-num { display: inline-block; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-word { animation: none !important; }
 }

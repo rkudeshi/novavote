@@ -12,6 +12,7 @@ import SiteRhythm from '../components/charts/SiteRhythm.jsx';
 import SiteMap from '../components/charts/SiteMap.jsx';
 import ReportSummary from '../components/charts/ReportSummary.jsx';
 import Treemap from '../components/charts/Treemap.jsx';
+import WeatherIcon from '../components/WeatherIcon.jsx';
 
 /* Sequential ramp for the site treemap — sites are ranked by size, so a
    single hue stepped light-to-dark encodes that order; a categorical
@@ -409,7 +410,7 @@ function DataTable({ ds }) {
       render: (r) =>
         r.weather ? (
           <span className={`wx ${r.weather.wet ? 'is-wet' : ''} ${r.weather.snowy ? 'is-snowy' : ''}`}>
-            {r.weather.snowy ? '❄' : r.weather.wet ? '☔' : '○'} {r.weather.label},{' '}
+            <WeatherIcon wet={r.weather.wet} snowy={r.weather.snowy} /> {r.weather.label},{' '}
             {Math.round(r.weather.tempMax)}°/{Math.round(r.weather.tempMin)}°
             {r.weather.precip >= 0.01 ? ` · ${r.weather.precip.toFixed(2)}″` : ''}
           </span>

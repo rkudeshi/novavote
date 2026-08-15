@@ -89,12 +89,20 @@ function Hero() {
         <div className="eyebrow rise" style={{ animationDelay: '.05s' }}>
           Northern Virginia · November 2025 general election
         </div>
-        <h1 className="h1 rise" style={{ animationDelay: '.12s' }}>
-          <span className="hero-num">{fmt(Math.round(n))}</span>
+        <h1 className="h1 hero-h1">
+          <span className="hero-num rise" style={{ animationDelay: '.12s' }}>
+            {fmt(Math.round(n))}
+          </span>
           <br />
-          early ballots
+          {/* Word-by-word reveal. The number lands first and the sentence
+              assembles under it, so the eye reads the figure before the
+              clause that qualifies it. */}
+          <Words text="early ballots" start={0.34} />
           <br />
-          {only ? `in ${only.name}.` : `across ${reporting} jurisdictions.`}
+          <Words
+            text={only ? `in ${only.name}.` : `across ${reporting} jurisdictions.`}
+            start={0.52}
+          />
         </h1>
         <p className="lede rise" style={{ animationDelay: '.2s', marginTop: 20 }}>
           NovaVote tracks early voting across Northern Virginia — in person and
@@ -109,6 +117,27 @@ function Hero() {
       </div>
     </section>
   );
+}
+
+/**
+ * Word-by-word reveal for the hero headline.
+ *
+ * Split on spaces and animate each word in turn, so the number lands
+ * first and the sentence assembles under it. Non-breaking spaces keep
+ * the inline-block words from collapsing their gaps.
+ */
+function Words({ text, start = 0 }) {
+  const words = text.split(' ');
+  return words.map((word, i) => (
+    <span
+      key={`${word}-${i}`}
+      className="hero-word"
+      style={{ animationDelay: `${start + i * 0.09}s` }}
+    >
+      {word}
+      {i < words.length - 1 ? '\u00a0' : ''}
+    </span>
+  ));
 }
 
 /**

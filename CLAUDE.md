@@ -239,6 +239,17 @@ merge.
 
 ## Automation
 
+**Never write the CI-skip marker literally in a commit message** — the
+bracketed `skip`/`ci` token GitHub recognises. GitHub concatenates a
+branch's commit messages into the body of a squash merge, so the token
+rides onto `main` and suppresses **every** workflow for that push,
+including the Pages deploy. This has bitten twice: once from the extract
+workflow's own commit (now removed), and once from a commit message that
+merely *described* the problem. Refer to it in prose, never as the token.
+A merge that lands green is not proof the site deployed — check that a
+deploy run exists for the merge SHA, and dispatch `deploy.yml` manually if
+not.
+
 `.github/workflows/daily-pull.yml` runs daily and pulls every source
 marked `"active": true` in `data/sources.json`, parses, reconciles and
 commits. It no-ops while nothing is active. To turn on the 2026 cycle:
@@ -300,6 +311,22 @@ free-standing squares made the reader estimate across whitespace. Tile
 colour is a sequential ramp walked **monotonically by rank** — cycling it
 put the darkest colour back on a small site — and label colour is derived
 from the fill's luminance, never from rank.
+
+**Layout thresholds are measured in pixels, not percent.** `useWidth()`
+in `src/lib/motion.js` measures the real element; a percentage threshold
+is the same number on a 1000px bar and a 350px one, which is how labels
+ended up clipped mid-word on a phone.
+
+**Grid tracks holding flex bars need `minmax(0, 1fr)`.** A non-wrapping
+flex row's min-content width is the *sum* of its items' min-content
+widths, so a labelled bar reports ~400px on a phone and a default `auto`
+track grows to fit it — dragging the whole card past the viewport. This
+is what caused the mobile overflow; don't revert `.rs` to a bare `grid`.
+
+**Motion is decoration on a page that reads without it.** Everything
+animated degrades to its final state under `prefers-reduced-motion`, and
+no fact is conveyed by animation alone — a wet day is a different glyph
+*and* a different colour, not just a moving one.
 
 **Labels live on the mark.** Bars and squares carry their own name, count
 and share inside the shape; a shape too small for text gets a direct
