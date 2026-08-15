@@ -25,12 +25,32 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '4.1';
+export const VERSION = '5.0';
+
+/* Archive slug: a bare major release drops its ".0", so 4.0 lives at
+   /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
+   function, so the built directory and the link can never disagree. */
+export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '4.1',
+    v: '5.0',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Northern Virginia at a glance',
+    notes: [
+      'The home page now leads with a jurisdiction-by-jurisdiction comparison of the November 2025 early vote.',
+      'Scope narrowed to Northern Virginia: Falls Church City and Fairfax City added, Richmond and Virginia Beach dropped.',
+      'Vote-by-mail is now one group everywhere, with returned by mail and returned by drop box as its two subgroups.',
+      'Election pages lead with headline figures as large boxes, with counts and shares carried inside the bars themselves.',
+      'New breakdowns: proportional squares per in-person site, and the same treatment for vote-by-mail.',
+      'Section copy trimmed to what explains the numbers.',
+      'Narrower site-grid columns and a two-line header, so far more of the cycle fits on a phone.',
+    ],
+  },
+  {
+    v: '4.1',
+    commit: '0cf04081f6a2ba326c48558dc149c9debd6ca20e',
     date: 'August 2026',
     headline: 'The county report’s front page, rebuilt',
     notes: [

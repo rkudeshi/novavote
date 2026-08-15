@@ -11,6 +11,7 @@ import SurgeChart from '../components/charts/SurgeChart.jsx';
 import SiteRhythm from '../components/charts/SiteRhythm.jsx';
 import SiteMap from '../components/charts/SiteMap.jsx';
 import ReportSummary from '../components/charts/ReportSummary.jsx';
+import Squares from '../components/charts/Squares.jsx';
 
 const METHODS = [
   { key: 'inPerson', label: 'Early in person', color: 'var(--s1)', hex: '#2a78d6' },
@@ -52,56 +53,74 @@ export default function Election({ ds, all }) {
             </div>
           )}
 
-          <div className="kpis" style={{ marginTop: 30 }}>
-            <Kpi k="Early ballots, all methods" v={fmt(s.early)}
-                 s={ds.registeredVoters
-                   ? `${pct(s.earlyTurnoutOfRegistered, 1)} of registered voters`
-                   : 'in-person, mail and drop box'} />
-            <Kpi k="Early in person" v={fmt(ds.totals.inPerson)}
-                 s={`${pct((ds.totals.inPerson / s.early) * 100, 0)} of the early vote`} />
-            <Kpi k="Returned by mail" v={fmt(ds.totals.returnedMail)}
-                 s={`of ${fmt(ds.totals.ballotsMailed)} mailed out`} />
-            <Kpi k="Returned by drop box" v={fmt(ds.totals.returnedDropbox)}
-                 s={`${pct((ds.totals.returnedDropbox / (ds.totals.returnedMail + ds.totals.returnedDropbox)) * 100, 0)} of returned absentee`} />
-          </div>
         </div>
       </section>
 
-      {/* Leads the page: everything on the county report's first page,
-          restated with its denominators visible. See ReportSummary for
-          why two of the county's own labels are not reused. */}
       <section className="section">
         <div className="wrap">
-          <div className="eyebrow">The report's front page, rebuilt</div>
-          <h2 className="h2" style={{ marginBottom: 8 }}>
-            Every headline figure, and what it is a share of
+          <h2 className="h2" style={{ marginBottom: 22 }}>
+            Every headline figure
           </h2>
-          <p className="note" style={{ marginBottom: 22 }}>
-            The county's report opens with one table and eleven loose
-            percentages — quotients over three different denominators, none of
-            them labelled. These are the same numbers as{' '}
-            {ds.registeredVoters ? 'three' : 'two'} proportional bars, one per
-            question the page is actually asking.{' '}
-            {ds.sourceUrl && (
-              <a href={ds.sourceUrl} target="_blank" rel="noreferrer">
-                Original PDF ↗
-              </a>
-            )}
-          </p>
           <div className="card">
             <ReportSummary ds={ds} />
           </div>
         </div>
       </section>
 
+      {ds.sites.length > 1 && (
+        <section className="section">
+          <div className="wrap">
+            <h2 className="h2" style={{ marginBottom: 8 }}>Early in-person votes</h2>
+            <p className="note" style={{ marginBottom: 22 }}>
+              Square area is proportional to ballots cast at that site.
+            </p>
+            <div className="card">
+              <Squares
+                items={[...ds.sites]
+                  .sort((a, b) => b.total - a.total)
+                  .map((site) => ({
+                    key: site.key,
+                    label: site.label,
+                    value: site.total,
+                    color: 'var(--s1)',
+                    dark: true,
+                  }))}
+                total={ds.totals.inPerson}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="section">
         <div className="wrap">
-          <div className="eyebrow">Indexed to Election Day</div>
+          <h2 className="h2" style={{ marginBottom: 8 }}>Vote by mail</h2>
+          <p className="note" style={{ marginBottom: 22 }}>
+            Square area is proportional to ballots returned by that route.
+          </p>
+          <div className="card">
+            <Squares
+              items={[
+                {
+                  key: 'mail', label: 'Returned by mail', value: ds.totals.returnedMail,
+                  color: 'var(--s2)', dark: true,
+                },
+                {
+                  key: 'box', label: 'Returned by drop box', value: ds.totals.returnedDropbox,
+                  color: 'var(--s3)',
+                },
+              ]}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap">
           <h2 className="h2" style={{ marginBottom: 8 }}>How the vote came in</h2>
           <p className="note" style={{ marginBottom: 22 }}>
-            {others.length
-              ? `Shown against ${others.length} other cycle${others.length === 1 ? '' : 's'} in the archive, so the shape can be compared rather than just described.`
-              : 'The only cycle in the archive so far — comparisons appear here as more are added.'}
+            Each day is plotted by how many days it fell before Election Day, so
+            cycles line up against each other.
           </p>
           <div className="card chart-card">
             <SurgeChart datasets={[ds, ...others]} metric="share" height={360} />
@@ -115,15 +134,13 @@ export default function Election({ ds, all }) {
         <>
           <section className="section">
             <div className="wrap">
-              <div className="eyebrow">Where the sites are</div>
               <h2 className="h2" style={{ marginBottom: 8 }}>
-                {ds.sites.length} early voting sites across the county
+                {ds.sites.length} early voting sites
               </h2>
               <p className="note" style={{ marginBottom: 22 }}>
-                Circle area is proportional to the selected measure. Switching
-                between per-day and total is the point: sites opened on
-                different dates, so a total mostly measures how long a site was
-                open rather than how busy it was.
+                Circle area is proportional to the selected measure. Sites
+                opened on different dates, so a total partly reflects how long
+                a site was open.
               </p>
               <div className="card">
                 <SiteMap ds={ds} />
@@ -133,17 +150,12 @@ export default function Election({ ds, all }) {
 
           <section className="section">
             <div className="wrap">
-              <div className="eyebrow">Site by day</div>
               <h2 className="h2" style={{ marginBottom: 8 }}>
                 Every site, every day
               </h2>
               <p className="note" style={{ marginBottom: 22 }}>
-                Switch what each cell measures: raw ballots, a running total, a
-                share, or how a site moved against its own daily average or
-                against the county's pace. Raw counts answer "how many"; the
-                normalised views are what let a busy site and a quiet one be
-                compared on the same footing. Hover any cell for that day's
-                weather.
+                Each cell is one site on one day. Use the selector to change
+                what the cell measures. Hover for that day's weather.
               </p>
               <div className="card">
                 <SiteRhythm ds={ds} />
@@ -363,13 +375,18 @@ function DataTable({ ds }) {
 
   const cols = [
     { k: 'date', l: 'Date', render: (r) => longDate(r.date) },
-    { k: 'inPerson', l: 'Early in person' },
-    { k: 'returnedMail', l: 'Returned by mail' },
-    { k: 'returnedDropbox', l: 'Drop box' },
-    { k: 'ballotsMailed', l: 'Ballots mailed out' },
+    /* Two-line headers: the group on top, the specific measure beneath.
+       Splitting the label is what lets the column be as narrow as its
+       numbers rather than as wide as its name — which is most of what was
+       pushing this table off the side of a phone. */
+    { k: 'inPerson', l: 'In person', l2: 'ballots' },
+    { k: 'returnedMail', l: 'Vote by mail', l2: 'by mail' },
+    { k: 'returnedDropbox', l: 'Vote by mail', l2: 'drop box' },
+    { k: 'ballotsMailed', l: 'Issued', l2: 'by mail' },
     {
       k: 'weather',
       l: 'Weather',
+      l2: '',
       sortable: false,
       render: (r) =>
         r.weather ? (
@@ -476,12 +493,15 @@ function DataTable({ ds }) {
                         : 'none'
                     }
                   >
-                    {c.l}
-                    {c.sortable !== false && (
-                      <span className="caret">
-                        {sortKey === c.k ? (dir === 'asc' ? '▲' : '▼') : '↕'}
-                      </span>
-                    )}
+                    <span className="th-l1">
+                      {c.l}
+                      {c.sortable !== false && (
+                        <span className="caret">
+                          {sortKey === c.k ? (dir === 'asc' ? '▲' : '▼') : '↕'}
+                        </span>
+                      )}
+                    </span>
+                    <span className="th-l2">{c.l2 || ' '}</span>
                   </th>
                 ))}
               </tr>

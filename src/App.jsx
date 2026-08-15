@@ -31,19 +31,15 @@ function Routes() {
     page = ds ? <Election ds={ds} all={all} /> : <NotFound />;
   } else page = <NotFound />;
 
-  return <Shell all={all}>{page}</Shell>;
+  return <Shell>{page}</Shell>;
 }
 
-function Shell({ all, children }) {
-  const sources = all.map((d) => ({
-    url: d.sourceUrl,
-    label: `${d.locality} — ${d.electionDate.slice(0, 4)} daily report (PDF)`,
-  }));
+function Shell({ children }) {
   return (
     <>
       <Header />
       <main>{children}</main>
-      <Footer sources={sources} />
+      <Footer />
     </>
   );
 }

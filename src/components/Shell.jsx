@@ -3,10 +3,11 @@ import { VERSION } from '../version.js';
 
 export function Header() {
   const { path } = useRouter();
+  // Versions is reachable from the footer only — it's provenance, not a
+  // destination someone comes to the site for.
   const nav = [
     { to: '/', label: 'Overview' },
     { to: '/elections', label: 'Elections' },
-    { to: '/versions', label: 'Versions' },
   ];
   return (
     <header className="hdr">
@@ -50,49 +51,15 @@ function Mark() {
   );
 }
 
-export function Footer({ sources = [] }) {
+export function Footer() {
   return (
     <footer className="ftr">
       <div className="wrap ftr-in">
-        <div>
-          <div className="ftr-h">Source</div>
-          <p>
-            Fairfax County Office of Elections, Absentee &amp; Early Voting Daily
-            Reports. The county labels these reports unofficial; they are not
-            certified results.
-          </p>
-          {sources.map((s) => (
-            <p key={s.url}>
-              <a href={s.url} target="_blank" rel="noreferrer" className="ftr-link">
-                {s.label} ↗
-              </a>
-            </p>
-          ))}
-        </div>
-        <div>
-          <div className="ftr-h">Reconciliation</div>
-          <p>
-            Every daily series and every early-voting site column is summed and
-            checked against the totals the county publishes in the same report.
-            A figure that doesn't reconcile fails the build rather than shipping.
-          </p>
-        </div>
-        <div>
-          <div className="ftr-h">This build</div>
-          <p>
-            NovaVote <strong>v{VERSION}</strong>. Every previous version stays
-            browsable as a frozen build —{' '}
-            <Link to="/versions" className="ftr-link">see the archive</Link>.
-          </p>
-        </div>
-        <div>
-          <div className="ftr-h">Not shown here</div>
-          <p>
-            Party registration, results, or any partisan split. This is
-            administrative turnout data: when and where ballots were cast,
-            nothing about who they were cast for.
-          </p>
-        </div>
+        <p className="ftr-by">
+          This site is made by{' '}
+          <a href="https://raviudeshi.com" className="ftr-link">Ravi Udeshi</a>.
+        </p>
+        <Link to="/versions" className="ftr-link ftr-ver">Version {VERSION}</Link>
       </div>
     </footer>
   );

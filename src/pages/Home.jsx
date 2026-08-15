@@ -1,56 +1,42 @@
 import { useMemo, useState } from 'react';
 import { DATASETS } from '../data/generated/index.js';
+import { JURISDICTIONS, NOV2025 } from '../data/jurisdictions.js';
 import { Link } from '../lib/router.jsx';
-import { fmt, fullDate, longDate, pct, shortDate } from '../lib/format.js';
-import { byRecency, summary } from '../lib/derive.js';
+import { fmt, pct, shortDate } from '../lib/format.js';
+import { byRecency, methodTotals, summary } from '../lib/derive.js';
 import { useCountUp, useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
 
 const VIEWS = [
-  {
-    key: 'share',
-    label: 'Daily share',
-    blurb:
-      "Each day's ballots as a share of that cycle's whole early vote. The shape is the story: a long flat plain, then a wall.",
-  },
-  {
-    key: 'cumulativeShare',
-    label: 'Banked to date',
-    blurb:
-      'Cumulative share of the early vote already cast. Where the curve is still low with a week to go, most of the vote is still coming.',
-  },
-  {
-    key: 'electorateShare',
-    label: 'Share of electorate',
-    blurb:
-      'Ballots that day as a percentage of registered voters — the measure that compares jurisdictions of different sizes on equal footing.',
-  },
+  { key: 'share', label: 'Daily share' },
+  { key: 'cumulativeShare', label: 'Banked to date' },
+  { key: 'electorateShare', label: 'Share of electorate' },
 ];
+
+const BLURB = {
+  share: "Each day's ballots as a share of that cycle's whole early vote.",
+  cumulativeShare: 'Share of the early vote already cast by that day.',
+  electorateShare: 'Ballots that day as a percentage of registered voters.',
+};
 
 export default function Home() {
   const all = useMemo(() => byRecency(DATASETS), []);
-  const latest = all[0];
   const [view, setView] = useState('share');
 
   const comparable = useMemo(
-    () =>
-      view === 'electorateShare'
-        ? all.filter((d) => d.registeredVoters)
-        : all,
+    () => (view === 'electorateShare' ? all.filter((d) => d.registeredVoters) : all),
     [all, view],
   );
 
-  const active = VIEWS.find((v) => v.key === view);
-
   return (
     <>
-      <Hero ds={latest} count={all.length} />
+      <Hero />
+      <Jurisdictions />
 
       <section className="section">
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <div className="eyebrow">Every cycle, aligned to its own Election Day</div>
               <h2 className="h2">The shape of an early vote</h2>
             </div>
             <div className="seg" role="tablist" aria-label="Comparison metric">
@@ -67,101 +53,132 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <p className="lede" style={{ marginBottom: 24 }}>{active.blurb}</p>
+          <p className="note" style={{ marginBottom: 22 }}>
+            {BLURB[view]} Every cycle is plotted by days before its own Election
+            Day, so different years line up.
+          </p>
 
           <div className="card chart-card">
-            {comparable.length ? (
-              <SurgeChart
-                key={view}
-                datasets={comparable}
-                metric={view}
-                height={400}
-              />
-            ) : (
-              <p className="note" style={{ padding: 32 }}>
-                No cycle in the archive has a registered-voter count attached yet,
-                so this view has nothing to plot. The other two views work from
-                ballot counts alone.
-              </p>
-            )}
+            <SurgeChart key={view} datasets={comparable} metric={view} height={400} />
           </div>
 
           {view === 'electorateShare' && comparable.length < all.length && (
             <p className="note" style={{ marginTop: 14 }}>
-              Showing {comparable.length} of {all.length} cycles — the rest have no
-              registered-voter total recorded, so a share of the electorate can't
-              be computed for them.
+              {comparable.length} of {all.length} cycles shown — the rest have no
+              registered-voter count recorded.
             </p>
           )}
         </div>
       </section>
 
       <CycleGrid datasets={all} />
-      <Roadmap />
     </>
   );
 }
 
-function Hero({ ds, count }) {
+function Hero() {
   const [ref, inView] = useInView({ threshold: 0.3 });
-  const s = summary(ds);
-  const n = useCountUp(s.early, inView, 1700);
+  const { reporting, inScope, totals } = NOV2025;
+  const n = useCountUp(totals.early, inView, 1700);
+  const only = reporting === 1 ? JURISDICTIONS.find((j) => j.total != null) : null;
 
   return (
     <section className="section hero" ref={ref}>
       <div className="wrap">
         <div className="eyebrow rise" style={{ animationDelay: '.05s' }}>
-          {ds.locality} · {ds.electionName} · {fullDate(ds.electionDate)}
+          Northern Virginia · November 2025 general election
         </div>
         <h1 className="h1 rise" style={{ animationDelay: '.12s' }}>
           <span className="hero-num">{fmt(Math.round(n))}</span>
           <br />
-          ballots were cast before
+          early ballots
           <br />
-          anyone showed up to vote.
+          {only ? `in ${only.name}.` : `across ${reporting} jurisdictions.`}
         </h1>
         <p className="lede rise" style={{ animationDelay: '.2s', marginTop: 20 }}>
-          NovaVote tracks Virginia early voting day by day — in person, by mail,
-          and by drop box. {pct(s.closing7, 0)} of {ds.locality}'s{' '}
-          {ds.electionDate.slice(0, 4)} early vote arrived in the final week
-          alone, peaking at {fmt(s.peak.value)} ballots on{' '}
-          {longDate(s.peak.date)}.
+          NovaVote tracks early voting across Northern Virginia — in person and
+          by mail — day by day.{' '}
+          {reporting < inScope && (
+            <>
+              {reporting} of {inScope} jurisdictions{' '}
+              {reporting === 1 ? 'has' : 'have'} daily data so far.
+            </>
+          )}
         </p>
-
-        <div className="kpis rise" style={{ animationDelay: '.28s' }}>
-          <Kpi
-            k="Early ballots"
-            v={fmt(s.early)}
-            s={`across ${s.votingDays} voting days`}
-          />
-          <Kpi
-            k="Cast in the last 7 days"
-            v={pct(s.closing7, 0)}
-            s="of the cycle's early vote"
-          />
-          <Kpi
-            k="Busiest single day"
-            v={fmt(s.peak.value)}
-            s={longDate(s.peak.date)}
-          />
-          <Kpi
-            k="Cycles archived"
-            v={String(count)}
-            s="all reconciled to source"
-          />
-        </div>
       </div>
     </section>
   );
 }
 
-function Kpi({ k, v, s }) {
+/* ------------------------------------------------------------------
+   Jurisdiction comparison — the lead of the page.
+
+   Two encodings, because the two questions are different: the bar is
+   raw volume (Fairfax dwarfs Falls Church), the share split is the mix
+   (a small city can lean far harder on mail than a big county). Every
+   jurisdiction carries both, so neither reading is privileged.
+------------------------------------------------------------------ */
+function Jurisdictions() {
+  const [ref, inView] = useInView({ threshold: 0.1 });
+  const rows = JURISDICTIONS.filter((j) => j.total != null);
+  const pending = JURISDICTIONS.filter((j) => j.total == null);
+  const max = Math.max(...rows.map((j) => j.total), 1);
+
   return (
-    <div className="kpi">
-      <div className="kpi-k">{k}</div>
-      <div className="kpi-v">{v}</div>
-      <div className="kpi-s">{s}</div>
-    </div>
+    <section className="section" ref={ref}>
+      <div className="wrap">
+        <h2 className="h2" style={{ marginBottom: 8 }}>
+          Early voting by jurisdiction
+        </h2>
+        <p className="note" style={{ marginBottom: 26 }}>
+          November 2025 general election. Bar length is total early ballots;
+          the split shows how they were cast.
+        </p>
+
+        <div className="jur">
+          {rows.map((j, i) => {
+            const ipShare = (j.inPerson / j.total) * 100;
+            return (
+              <div className="jur-row" key={j.key}>
+                <div className="jur-name">
+                  {j.href ? <Link to={j.href}>{j.name}</Link> : j.name}
+                </div>
+                <div className="jur-barwrap">
+                  <div
+                    className="jur-bar"
+                    style={{
+                      width: inView ? `${(j.total / max) * 100}%` : '0%',
+                      transitionDelay: `${i * 60}ms`,
+                    }}
+                  >
+                    <span className="jur-seg" style={{ width: `${ipShare}%` }} />
+                    <span
+                      className="jur-seg is-vbm"
+                      style={{ width: `${100 - ipShare}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="jur-figs">
+                  <b>{fmt(j.total)}</b>
+                  <span className="jur-split">
+                    <i className="jur-dot" /> {pct(ipShare, 0)} in person
+                    <i className="jur-dot is-vbm" /> {pct(100 - ipShare, 0)} by mail
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {pending.length > 0 && (
+          <p className="note" style={{ marginTop: 22 }}>
+            {pending.map((j) => j.name).join(', ')}{' '}
+            {pending.length === 1 ? 'is' : 'are'} in scope, with no figures
+            recorded yet.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -169,12 +186,9 @@ function CycleGrid({ datasets }) {
   return (
     <section className="section">
       <div className="wrap">
-        <div className="sec-head">
-          <div>
-            <div className="eyebrow">The archive</div>
-            <h2 className="h2">Every election we hold data for</h2>
-          </div>
-        </div>
+        <h2 className="h2" style={{ marginBottom: 22 }}>
+          Elections with daily data
+        </h2>
         <div className="cycle-grid">
           {datasets.map((ds, i) => (
             <CycleCard key={ds.id} ds={ds} delay={i * 70} />
@@ -188,6 +202,7 @@ function CycleGrid({ datasets }) {
 function CycleCard({ ds, delay }) {
   const [ref, inView] = useInView({ threshold: 0.2 });
   const s = summary(ds);
+  const m = methodTotals(ds);
   return (
     <Link
       to={`/e/${ds.id}`}
@@ -205,58 +220,22 @@ function CycleCard({ ds, delay }) {
       </div>
       <h3 className="h3">{ds.locality}</h3>
       <div className="cycle-sub">{ds.electionName}</div>
-      {!s.complete && (
-        <div className="badge-partial">Mid-cycle snapshot</div>
-      )}
+      {!s.complete && <div className="badge-partial">Partial data</div>}
       <dl className="cycle-stats">
         <div>
           <dt>Early ballots</dt>
-          <dd>{fmt(s.early)}</dd>
+          <dd>{fmt(m.early)}</dd>
         </div>
         <div>
-          <dt>{s.complete ? 'Final week' : 'Data through'}</dt>
-          <dd>{s.complete ? pct(s.closing7, 0) : shortDate(ds.coverage.dataThrough)}</dd>
+          <dt>In person</dt>
+          <dd>{pct((m.inPerson / m.early) * 100, 0)}</dd>
         </div>
         <div>
-          <dt>Sites</dt>
-          <dd>{ds.sites.length}</dd>
+          <dt>{s.complete ? 'Sites' : 'Through'}</dt>
+          <dd>{s.complete ? ds.sites.length : shortDate(ds.coverage.dataThrough)}</dd>
         </div>
       </dl>
-      <span className="cycle-go">Explore this election →</span>
+      <span className="cycle-go">Explore →</span>
     </Link>
-  );
-}
-
-function Roadmap() {
-  const queued = [
-    ['Loudoun County', 'County publishes a daily AB report'],
-    ['Prince William County', 'County publishes a daily AB report'],
-    ['Arlington County', 'County publishes a daily AB report'],
-    ['City of Alexandria', 'City publishes a daily AB report'],
-    ['Richmond City', 'Needs a source survey'],
-    ['Virginia Beach', 'Needs a source survey'],
-  ];
-  return (
-    <section className="section">
-      <div className="wrap">
-        <div className="eyebrow">What plugs in next</div>
-        <h2 className="h2" style={{ marginBottom: 10 }}>
-          Built to take more jurisdictions
-        </h2>
-        <p className="note" style={{ marginBottom: 26 }}>
-          Every comparison on this page is indexed to days-until-Election-Day and
-          normalised by the size of the electorate, so a new locality drops in as
-          one more dataset — no chart changes. These are the ones queued up.
-        </p>
-        <div className="queue">
-          {queued.map(([name, note]) => (
-            <div key={name} className="queue-item">
-              <strong>{name}</strong>
-              <span>{note}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
