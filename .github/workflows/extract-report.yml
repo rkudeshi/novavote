@@ -18,6 +18,7 @@ on:
       - 'scripts/fetch_boundary.py'
       - 'scripts/fetch_fonts.py'
       - 'scripts/geocode_sites.py'
+      - 'scripts/fetch_weather.py'
       - 'data/site_locations.json'
       - '.github/workflows/extract-report.yml'
   workflow_dispatch:
@@ -47,6 +48,11 @@ jobs:
 
       - name: Fetch county boundary
         run: python scripts/fetch_boundary.py
+
+      - name: Fetch daily weather
+        # After the boundary fetch: the centroid is derived from it.
+        continue-on-error: true
+        run: python scripts/fetch_weather.py
 
       - name: Discover published reports
         continue-on-error: true
@@ -80,7 +86,7 @@ jobs:
           BRANCH="${{ github.ref_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/parsed data/site_locations.json src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
+          git add data/parsed data/site_locations.json data/weather.json src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
           if git diff --staged --quiet; then
             echo "nothing to commit"
             exit 0

@@ -151,6 +151,15 @@ const pick = (row, names) => {
 
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
+/* County-level daily weather, one observation per day at the county
+   centroid (see scripts/fetch_weather.py). Attached per day so the UI can
+   put it beside a turnout figure without a second lookup. */
+const WEATHER = (() => {
+  const file = path.join(ROOT, 'data', 'weather.json');
+  if (!existsSync(file)) return {};
+  return JSON.parse(readFileSync(file, 'utf8')).cycles || {};
+})();
+
 /**
  * Resolve opening hours per (site, date) from data/site_schedules.json.
  *
@@ -250,6 +259,7 @@ function buildCycle(cycle) {
     }
     return {
       date: d,
+      weather: WEATHER[cycle.id]?.[d] ?? null,
       inPerson: e ? num(e.total) : null,
       sites,
       returnedMail: mailBy[d] && mailTotalCol ? num(mailBy[d][mailTotalCol]) : null,
@@ -314,6 +324,13 @@ function buildCycle(cycle) {
   const daysBeforeElection = dataThrough
     ? Math.round((new Date(cycle.electionDate) - new Date(dataThrough)) / MS)
     : null;
+
+  const wxDays = days.filter((d) => d.weather).length;
+  if (WEATHER[cycle.id] && wxDays < days.length) {
+    console.warn(
+      `gen-data: ${cycle.id} has weather for ${wxDays}/${days.length} days`,
+    );
+  }
 
   const { hours, gaps } = buildSchedule(
     cycle.id, days, sites.map((s) => s.key),

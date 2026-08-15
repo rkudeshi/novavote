@@ -92,7 +92,7 @@ export default function Election({ ds, all }) {
                 {ds.sites.length} early voting sites across the county
               </h2>
               <p className="note" style={{ marginBottom: 22 }}>
-                Oval area is proportional to the selected measure. Switching
+                Circle area is proportional to the selected measure. Switching
                 between per-day and total is the point: sites opened on
                 different dates, so a total mostly measures how long a site was
                 open rather than how busy it was.
@@ -110,10 +110,12 @@ export default function Election({ ds, all }) {
                 Every site, every day
               </h2>
               <p className="note" style={{ marginBottom: 22 }}>
-                Switch what each cell measures — raw ballots, a running total,
-                a share, or how each site moved against its own norm. Raw counts
-                answer "how many"; the normalised views are what let a busy site
-                and a quiet one be compared on the same footing.
+                Switch what each cell measures: raw ballots, a running total, a
+                share, or how a site moved against its own daily average or
+                against the county's pace. Raw counts answer "how many"; the
+                normalised views are what let a busy site and a quiet one be
+                compared on the same footing. Hover any cell for that day's
+                weather.
               </p>
               <div className="card">
                 <SiteRhythm ds={ds} />
@@ -314,9 +316,22 @@ function peakOf(ds, key) {
   return best;
 }
 
+/* Column tints. Each numeric column is scaled against its own maximum and
+   tinted with its method's hue, so a column of small numbers still shows
+   its own shape instead of being flattened by a larger column. Alpha tops
+   out well below full so the figure stays legible in ink. */
+const COL_RGB = {
+  inPerson: [42, 120, 214],
+  returnedMail: [235, 104, 52],
+  returnedDropbox: [27, 175, 122],
+  ballotsMailed: [124, 135, 155],
+};
+const MAX_ALPHA = 0.5;
+
 function DataTable({ ds }) {
   const [sortKey, setSortKey] = useState('date');
   const [dir, setDir] = useState('asc');
+  const [shade, setShade] = useState(true);
 
   const cols = [
     { k: 'date', l: 'Date', render: (r) => longDate(r.date) },
@@ -324,7 +339,38 @@ function DataTable({ ds }) {
     { k: 'returnedMail', l: 'Returned by mail' },
     { k: 'returnedDropbox', l: 'Drop box' },
     { k: 'ballotsMailed', l: 'Ballots mailed out' },
+    {
+      k: 'weather',
+      l: 'Weather',
+      sortable: false,
+      render: (r) =>
+        r.weather ? (
+          <span className={`wx ${r.weather.wet ? 'is-wet' : ''} ${r.weather.snowy ? 'is-snowy' : ''}`}>
+            {r.weather.snowy ? '❄' : r.weather.wet ? '☔' : '○'} {r.weather.label},{' '}
+            {Math.round(r.weather.tempMax)}°/{Math.round(r.weather.tempMin)}°
+            {r.weather.precip >= 0.01 ? ` · ${r.weather.precip.toFixed(2)}″` : ''}
+          </span>
+        ) : '—',
+    },
   ];
+
+  const colMax = useMemo(() => {
+    const m = {};
+    for (const c of cols) {
+      if (c.k === 'date' || c.k === 'weather') continue;
+      m[c.k] = Math.max(...ds.days.map((d) => d[c.k] ?? 0), 1);
+    }
+    return m;
+  }, [ds]);
+
+  const tint = (key, v) => {
+    if (!shade || v == null || !COL_RGB[key]) return undefined;
+    const [r, g, b] = COL_RGB[key];
+    // sqrt so the long tail of small days stays visible rather than
+    // collapsing to white against a few very large ones.
+    const a = Math.sqrt(Math.max(0, v) / colMax[key]) * MAX_ALPHA;
+    return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+  };
 
   const rows = useMemo(() => {
     const a = [...ds.days];
@@ -375,7 +421,17 @@ function DataTable({ ds }) {
             <div className="eyebrow">Full detail</div>
             <h2 className="h2">Every day, every number</h2>
           </div>
-          <button className="btn" onClick={download}>Download CSV</button>
+          <div className="table-tools">
+            <label className="rhythm-check">
+              <input
+                type="checkbox"
+                checked={shade}
+                onChange={(e) => setShade(e.target.checked)}
+              />
+              Shade by value
+            </label>
+            <button className="btn" onClick={download}>Download CSV</button>
+          </div>
         </div>
         <div className="card tablewrap">
           <table className="table">
@@ -384,8 +440,8 @@ function DataTable({ ds }) {
                 {cols.map((c) => (
                   <th
                     key={c.k}
-                    onClick={() => click(c.k)}
-                    className={sortKey === c.k ? 'is-on' : ''}
+                    onClick={() => c.sortable !== false && click(c.k)}
+                    className={`${sortKey === c.k ? 'is-on' : ''} ${c.sortable === false ? 'is-static' : ''}`}
                     aria-sort={
                       sortKey === c.k
                         ? dir === 'asc' ? 'ascending' : 'descending'
@@ -393,9 +449,11 @@ function DataTable({ ds }) {
                     }
                   >
                     {c.l}
-                    <span className="caret">
-                      {sortKey === c.k ? (dir === 'asc' ? '▲' : '▼') : '↕'}
-                    </span>
+                    {c.sortable !== false && (
+                      <span className="caret">
+                        {sortKey === c.k ? (dir === 'asc' ? '▲' : '▼') : '↕'}
+                      </span>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -404,7 +462,11 @@ function DataTable({ ds }) {
               {rows.map((r) => (
                 <tr key={r.date}>
                   {cols.map((c) => (
-                    <td key={c.k} className={c.k === 'date' ? 'td-date' : 'td-num'}>
+                    <td
+                      key={c.k}
+                      className={c.k === 'date' ? 'td-date' : c.k === 'weather' ? 'td-wx' : 'td-num'}
+                      style={{ background: tint(c.k, r[c.k]) }}
+                    >
                       {c.render ? c.render(r) : fmt(r[c.k])}
                     </td>
                   ))}

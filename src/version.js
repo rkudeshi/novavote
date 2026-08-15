@@ -25,12 +25,26 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '3.0';
+export const VERSION = '4.0';
 
 export const VERSIONS = [
   {
-    v: '3.0',
+    v: '4.0',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Weather, a day-by-day map, and a rebuilt site grid',
+    notes: [
+      'Daily county weather on every view — the map, the site grid and the full table — so a soft day can be checked against whether it rained.',
+      'The map gained a day-by-day scrubber: play through the cycle and watch thirteen sites switch on at once on 23 October.',
+      'Site grid metrics reworked and renamed to say what they actually compute, including a plain "vs this site\u2019s daily average".',
+      'Day of week added to the grid header; weekends marked.',
+      'The full data table is now shaded per column, each on its own scale.',
+      'Map markers are circles rather than ovals, so area reads correctly.',
+    ],
+  },
+  {
+    v: '3.0',
+    commit: '5a8abd3d2589d45e18afa81e73539aca6b0c3ba1',
     date: 'August 2026',
     headline: 'Real geocoded site locations, and a versioned archive',
     notes: [
