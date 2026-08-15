@@ -50,8 +50,8 @@ against its own published grand total individually. There are 16 sites, not 17.
 /                     cross-cycle overview + comparison
 /elections            index of every locality-election
 /e/<cycle-id>         per-election detail (charts, map, table)
-/versions             version archive
-/versions/v1          v1 preserved as a live component
+/versions             version archive (linked from the footer only)
+/versions/v4          archived build; a bare major drops its ".0"
 ```
 
 Routing is a ~60-line path router (`src/lib/router.jsx`). GitHub Pages has
@@ -250,8 +250,13 @@ every push to `main`.
 
 ## Not done yet / where to pick up
 - **Final 2023/2024 reports** — the two we have are partial (above).
-- **Other localities**: Loudoun, Prince William, Arlington, Alexandria,
-  Richmond, Virginia Beach. The comparison charts are already normalised
+- **Other localities** (Northern Virginia only, by design): Loudoun,
+  Prince William, Arlington, Alexandria City, Fairfax City, Falls Church
+  City. Naming convention is "<Name> City", never "City of <Name>".
+  `src/data/jurisdictions.js` is the scope list; a jurisdiction with no
+  reconciled dataset carries `total: null` and renders as "no figures
+  recorded yet" — **never** fill it with an estimate or a press figure.
+  The comparison charts are already normalised
   (days-until-election, share of electorate), so a new locality is one
   more entry in `CYCLES` plus its CSVs — no chart changes.
 - **Registered-voter counts** for 2023/2024, so the "share of electorate"
@@ -270,3 +275,25 @@ every push to `main`.
 - No results or partisan data anywhere, by design. Turnout only — when and
   where ballots were cast, nothing about who they were cast for. Keep it
   that way unless explicitly asked.
+
+## Presentation rules
+
+**Vote by mail is one group, everywhere.** Returned by mail and returned
+by drop box are subgroups within it, never peers of in-person voting — a
+voter chooses to vote by mail, then chooses how to hand the ballot back.
+`methodTotals()` in `src/lib/derive.js` is the single place that grouping
+lives; use it rather than adding `returnedMail + returnedDropbox` inline.
+
+**Section copy explains numbers, nothing else.** No commentary on what a
+figure "really" means, no criticism of how a source presents its data, no
+references to source PDFs or upstream publishers in user-facing text.
+Provenance belongs in code comments and this file. A section blurb should
+say what the reader is looking at and what it is a share of, then stop.
+
+**Labels live on the mark.** Bars and squares carry their own name, count
+and share inside the shape; a shape too small for text gets a direct
+label immediately beneath its own chart, never a detached legend.
+
+**Source PDFs** are archived to `data/sources/` by the extract workflow —
+a reference copy in the repo, deliberately *not* under `public/`, so the
+built site never serves them.

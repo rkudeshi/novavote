@@ -77,6 +77,27 @@ export function closingShare(ds, n = 7) {
   return total ? (late / total) * 100 : 0;
 }
 
+/**
+ * Ballot totals grouped the way the whole site presents them.
+ *
+ * Vote by mail is one group; mail and drop box are delivery routes within
+ * it. A voter chooses to vote by mail, then chooses how to hand the ballot
+ * back — so the two are subgroups, never peers of in-person voting. Use
+ * this rather than adding `returnedMail + returnedDropbox` inline, so the
+ * grouping stays consistent everywhere.
+ */
+export function methodTotals(ds) {
+  const t = ds.totals;
+  const vbm = t.returnedMail + t.returnedDropbox;
+  return {
+    inPerson: t.inPerson,
+    vbm,
+    byMail: t.returnedMail,
+    byDropbox: t.returnedDropbox,
+    early: t.inPerson + vbm,
+  };
+}
+
 /** Headline numbers for a dataset, shared by the home cards and detail page. */
 export function summary(ds) {
   const early = earlyTotal(ds);

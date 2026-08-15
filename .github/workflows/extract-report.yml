@@ -72,6 +72,17 @@ jobs:
           python scripts/parse_report.py pdf-extract/nov2025.pdf \
             --year 2025 --cycle fairfax-2025-general
 
+      - name: Keep a local copy of each source PDF
+        # Held in the repo under data/sources/ rather than public/, so it is
+        # a reference copy we control and not something the built site
+        # serves. Publishers move and delete these files; once a report is
+        # gone from the county's server, this is the only copy of what the
+        # committed CSVs were parsed from.
+        run: |
+          mkdir -p data/sources
+          cp -f pdf-extract/*.pdf data/sources/ 2>/dev/null || true
+          ls -la data/sources/
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -86,7 +97,7 @@ jobs:
           BRANCH="${{ github.ref_name }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/parsed data/site_locations.json data/weather.json src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
+          git add data/sources data/parsed data/site_locations.json data/weather.json src/data/fairfax-boundary.json src/fonts src/styles/fonts.css
           if git diff --staged --quiet; then
             echo "nothing to commit"
             exit 0

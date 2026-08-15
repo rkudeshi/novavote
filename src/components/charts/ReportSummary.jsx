@@ -1,75 +1,80 @@
 /* ------------------------------------------------------------------
-   The county report's front page, rebuilt.
+   Headline figures for a cycle.
 
-   Fairfax's AB Daily Report opens with a small table and then eleven
-   loose percentages stacked under it. Every one of those figures is
-   derived from six counts, and the percentages are quotients over three
-   different denominators — registered voters, ballots issued, ballots
-   returned — with nothing on the page saying which is which. So the
-   reader is handed "74%", "80%", "32%" and "68%" with no way to tell
-   that they are answers to four different questions.
+   Layout: large stat boxes carry the counts and their shares, then
+   proportional bars underneath show how each total divides. Every label
+   sits inside the segment it describes, or directly beneath a segment
+   too narrow to hold text — there is no separate legend to look up.
 
-   This rebuilds it as three proportional bars, one per question the
-   page is actually asking:
-
-     1. How much of the electorate voted early at all?
-     2. Of those early ballots, how were they cast?
-     3. Of the mail ballots issued, what became of them?
-
-   Bar 3 is the one the PDF cannot draw, because the county never prints
-   the residual: 87,547 issued minus 51,413 returned by mail minus
-   12,954 by drop box minus 1,654 whose requester voted in person leaves
-   21,526 ballots that simply never came back. That is a quarter of every
-   ballot mailed, and it is the most interesting number on the page.
-
-   Two of the county's own labels are wrong in a way worth flagging
-   rather than propagating — see LABEL NOTES at the bottom of the file.
+   Vote by mail is one group with two subgroups (returned by mail,
+   returned by drop box), which is how the whole site treats it. The
+   grouping is structural: a voter chooses vote-by-mail, and the drop box
+   versus the postal service is a delivery detail within that choice.
 ------------------------------------------------------------------ */
-import { useState } from 'react';
 import { fmt, pct } from '../../lib/format.js';
-import { isComplete } from '../../lib/derive.js';
+import { isComplete, methodTotals } from '../../lib/derive.js';
 
 const NEUTRAL = 'var(--line-strong)';
+/* Below this width a segment cannot hold its own text, so the label is
+   rendered under the bar, anchored to the segment's centre. */
+const INSIDE_MIN = 12;
+/* A subgroup narrower than this can hold a number but not a name; the
+   name is carried by the caption row under the bar instead. */
+const SUB_NAME_MIN = 30;
 
-/** A stacked proportional bar plus a keyed read-out of its parts. */
-function FlowBar({ title, question, total, totalLabel, parts, note }) {
-  const [hover, setHover] = useState(null);
-  const sum = parts.reduce((s, p) => s + p.value, 0);
-  const denom = total ?? sum;
+function Stat({ label, value, sub, accent }) {
+  return (
+    <div className="rs-stat">
+      {accent && <span className="rs-stat-rule" style={{ background: accent }} />}
+      <div className="rs-stat-k">{label}</div>
+      <div className="rs-stat-v">{fmt(value)}</div>
+      {sub && <div className="rs-stat-s">{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * A proportional bar. `parts` may each carry `sub` — a nested breakdown
+ * rendered as a second tier spanning only that part's width, which is how
+ * vote-by-mail shows its two delivery routes without becoming a peer of
+ * in-person voting.
+ */
+function Bar({ title, total, totalLabel, parts, note }) {
+  const outside = [];
+  let acc = 0;
 
   return (
     <div className="rs-flow">
       <div className="rs-flow-head">
         <h3 className="rs-flow-title">{title}</h3>
         <div className="rs-flow-total">
-          <b>{fmt(denom)}</b> {totalLabel}
+          <b>{fmt(total)}</b> {totalLabel}
         </div>
       </div>
-      <p className="rs-flow-q">{question}</p>
 
       <div
         className="rs-bar"
         role="img"
         aria-label={parts
-          .map((p) => `${p.label}: ${fmt(p.value)}, ${pct((p.value / denom) * 100, 1)}`)
+          .map((p) => `${p.label}: ${fmt(p.value)}, ${pct((p.value / total) * 100, 1)}`)
           .join('; ')}
-        onMouseLeave={() => setHover(null)}
       >
         {parts.map((p) => {
-          const share = (p.value / denom) * 100;
+          const share = (p.value / total) * 100;
+          const mid = acc + share / 2;
+          acc += share;
+          if (share < INSIDE_MIN) outside.push({ ...p, share, mid });
           return (
             <div
               key={p.key}
-              className={`rs-seg ${hover && hover !== p.key ? 'is-dim' : ''}`}
+              className="rs-seg"
               style={{ width: `${share}%`, background: p.color }}
-              onMouseEnter={() => setHover(p.key)}
               title={`${p.label}: ${fmt(p.value)} (${pct(share, 1)})`}
             >
-              {/* Only label inside the bar when the segment can actually
-                  hold the text; everything is in the list below anyway. */}
-              {share >= 12 && (
+              {share >= INSIDE_MIN && (
                 <span className={`rs-seg-in ${p.dark ? 'on-dark' : ''}`}>
-                  {pct(share, 1)}
+                  <b>{p.label}</b>
+                  <i>{fmt(p.value)} · {pct(share, 1)}</i>
                 </span>
               )}
             </div>
@@ -77,25 +82,48 @@ function FlowBar({ title, question, total, totalLabel, parts, note }) {
         })}
       </div>
 
-      <ul className="rs-keys">
-        {parts.map((p) => {
-          const share = (p.value / denom) * 100;
-          return (
-            <li
-              key={p.key}
-              className={`rs-key ${hover && hover !== p.key ? 'is-dim' : ''}`}
-              onMouseEnter={() => setHover(p.key)}
-              onMouseLeave={() => setHover(null)}
-            >
-              <span className="rs-swatch" style={{ background: p.color }} />
-              <span className="rs-key-label">{p.label}</span>
-              <span className="rs-key-val">{fmt(p.value)}</span>
-              <span className="rs-key-pct">{pct(share, 1)}</span>
-              {p.of && <span className="rs-key-of">{p.of}</span>}
-            </li>
-          );
-        })}
-      </ul>
+      {/* Slivers cannot hold their own text. Their labels wrap in a row
+          directly under the bar rather than being pinned to the segment
+          centre, which collided as soon as two slivers sat side by side. */}
+      {outside.length > 0 && (
+        <div className="rs-out">
+          {outside.map((p) => (
+            <span key={p.key} className="rs-out-lbl">
+              <span className="rs-out-dot" style={{ background: p.color }} />
+              {p.label} · {fmt(p.value)} · {pct(p.share, 1)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Second tier: a subgroup breakdown spanning only its parent. */}
+      {parts.some((p) => p.sub) && (
+        <div className="rs-subbar">
+          {parts.map((p) => {
+            const share = (p.value / total) * 100;
+            if (!p.sub) return <div key={p.key} style={{ width: `${share}%` }} />;
+            return (
+              <div key={p.key} className="rs-subwrap" style={{ width: `${share}%` }}>
+                {p.sub.map((s) => {
+                  const w = (s.value / p.value) * 100;
+                  return (
+                    <div
+                      key={s.key}
+                      className="rs-subseg"
+                      style={{ width: `${w}%`, background: s.color }}
+                      title={`${s.label}: ${fmt(s.value)}`}
+                    >
+                      <span className={`rs-subseg-in ${s.dark ? 'on-dark' : ''}`}>
+                        {w >= SUB_NAME_MIN ? `${s.label} · ${fmt(s.value)}` : fmt(s.value)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {note && <p className="rs-flow-note">{note}</p>}
     </div>
@@ -104,140 +132,99 @@ function FlowBar({ title, question, total, totalLabel, parts, note }) {
 
 export default function ReportSummary({ ds }) {
   const t = ds.totals;
-  const early = t.inPerson + t.returnedMail + t.returnedDropbox;
-  const returnedAbsentee = t.returnedMail + t.returnedDropbox;
+  const m = methodTotals(ds);
   const reg = ds.registeredVoters || null;
   const abIn = t.abInPerson || 0;
-  /* A mid-cycle snapshot has not had time for mail ballots to come back,
-     so its residual is "not returned *yet*", not "abandoned" — and any
-     ratio over its tiny returned-absentee count is noise. Both are
-     suppressed rather than shown with a caveat nobody reads. */
   const complete = isComplete(ds);
 
-  /* The residual the report never prints. Guarded at zero: a partial
-     cycle can report more issued-then-returned than a snapshot's own
-     mailed count if the two series stop on different dates. */
-  const unreturned = Math.max(0, t.ballotsMailed - returnedAbsentee - abIn);
+  /* Ballots issued that never came back. Guarded at zero: on a snapshot
+     the mailed and returned series can stop on different dates. */
+  const unreturned = Math.max(0, t.ballotsMailed - m.vbm - abIn);
 
   return (
     <div className="rs">
+      <div className="rs-stats">
+        <Stat
+          label="Early ballots cast"
+          value={m.early}
+          sub={reg ? `${pct((m.early / reg) * 100, 2)} of registered voters` : 'all methods'}
+          accent="var(--ink)"
+          wide
+        />
+        <Stat
+          label="Early in person"
+          value={m.inPerson}
+          sub={`${pct((m.inPerson / m.early) * 100, 1)} of early ballots`}
+          accent="var(--s1)"
+        />
+        <Stat
+          label="Vote by mail"
+          value={m.vbm}
+          sub={`${pct((m.vbm / m.early) * 100, 1)} of early ballots`}
+          accent="var(--s2)"
+        />
+        <Stat
+          label="Ballots issued by mail"
+          value={t.ballotsMailed}
+          sub={reg ? `${pct((t.ballotsMailed / reg) * 100, 1)} of registered voters` : null}
+          accent={NEUTRAL}
+        />
+      </div>
+
       {reg && (
-        <FlowBar
-          title="Who voted early"
-          question="How much of the electorate cast a ballot before Election Day?"
+        <Bar
+          title="Share of the electorate voting early"
           total={reg}
           totalLabel="registered voters"
           parts={[
-            {
-              key: 'early', label: 'Voted early, any method', value: early,
-              color: 'var(--s1)', dark: true,
-            },
-            {
-              key: 'not', label: 'Did not vote early', value: reg - early,
-              color: NEUTRAL,
-              of: 'includes Election Day voters and non-voters alike',
-            },
+            { key: 'early', label: 'Voted early', value: m.early, color: 'var(--s1)', dark: true },
+            { key: 'not', label: 'Did not vote early', value: reg - m.early, color: NEUTRAL },
           ]}
-          note={`The county's front page calls the ${pct((early / reg) * 100, 2)} figure
-                 "% Voted (Turnout)". It is early-vote share of registered voters —
-                 Election Day ballots are not in this report at all, so real turnout
-                 is higher by an amount these files cannot tell you.`}
+          note="Election Day ballots are not counted here, so this is not total turnout."
         />
       )}
 
-      <FlowBar
+      <Bar
         title="How the early vote was cast"
-        question="Of the ballots cast before Election Day, which route did they take?"
-        total={early}
+        total={m.early}
         totalLabel="early ballots"
         parts={[
           {
-            key: 'ip', label: 'Early in person', value: t.inPerson,
-            color: 'var(--s1)', dark: true, of: 'at a county voting site',
+            key: 'ip', label: 'Early in person', value: m.inPerson,
+            color: 'var(--s1)', dark: true,
           },
           {
-            key: 'mail', label: 'Returned by mail or email', value: t.returnedMail,
+            key: 'vbm', label: 'Vote by mail', value: m.vbm,
             color: 'var(--s2)', dark: true,
-            of: complete
-              ? `${pct((t.returnedMail / returnedAbsentee) * 100, 0)} of the ${fmt(returnedAbsentee)} absentee ballots returned`
-              : null,
-          },
-          {
-            key: 'box', label: 'Returned by drop box', value: t.returnedDropbox,
-            color: 'var(--s3)',
-            of: complete
-              ? `${pct((t.returnedDropbox / returnedAbsentee) * 100, 0)} of the same ${fmt(returnedAbsentee)}`
-              : null,
+            sub: [
+              { key: 'mail', label: 'By mail', value: t.returnedMail, color: 'var(--s2)', dark: true },
+              { key: 'box', label: 'Drop box', value: t.returnedDropbox, color: 'var(--s3)' },
+            ],
           },
         ]}
-        note={complete
-          ? `The two absentee routes together are ${fmt(returnedAbsentee)} ballots,
-             ${pct((returnedAbsentee / early) * 100, 1)} of the early vote — the report's
-             "% Voting Absentee by Mail 32%". It prints that beside
-             "% Returned by Drop Box 20%", which is a share of absentee ballots
-             returned, not of the early vote. Two denominators, one line apart,
-             neither of them stated.`
-          : `This is a mid-cycle snapshot, so the mix is not the cycle's final one —
-             mail ballots return late, and most of this report's had not come back yet.`}
       />
 
-      <FlowBar
-        title="What became of the mail ballots"
-        question="Every ballot the county mailed or emailed out, and where it ended up."
+      <Bar
+        title="What became of the ballots issued by mail"
         total={t.ballotsMailed}
         totalLabel="ballots issued"
         parts={[
-          {
-            key: 'mail', label: 'Came back by mail or email', value: t.returnedMail,
-            color: 'var(--s2)', dark: true,
-          },
-          {
-            key: 'box', label: 'Came back via drop box', value: t.returnedDropbox,
-            color: 'var(--s3)',
-          },
-          {
-            key: 'ip', label: 'Requester voted in person instead', value: abIn,
-            color: 'var(--seq-250)',
-            of: `${pct((abIn / t.inPerson) * 100, 1)} of everyone who voted in person`,
-          },
+          { key: 'mail', label: 'Returned by mail', value: t.returnedMail, color: 'var(--s2)', dark: true },
+          { key: 'box', label: 'Returned by drop box', value: t.returnedDropbox, color: 'var(--s3)' },
+          { key: 'ip', label: 'Voted in person instead', value: abIn, color: 'var(--seq-250)' },
           {
             key: 'none',
-            label: complete ? 'Never returned' : 'Not returned as of this report',
+            label: complete ? 'Never returned' : 'Not returned yet',
             value: unreturned,
             color: NEUTRAL,
-            of: t.undeliverable != null
-              ? `${fmt(t.undeliverable)} of these came back undeliverable`
-              : null,
           },
         ]}
         note={complete
-          ? `This bar is the one the county's page does not draw. It prints
-             "% Total Returned 74%" — ${fmt(returnedAbsentee)} ÷ ${fmt(t.ballotsMailed)} —
-             which counts a requester who gave up on the mail and voted in person
-             as a ballot that never came back. Counting them,
-             ${pct(((returnedAbsentee + abIn) / t.ballotsMailed) * 100, 1)} of issued
-             ballots were accounted for.`
-          : `The report stops well before Election Day, so the grey block is mail
-             ballots still outstanding on the day it was published, not ballots
-             that were abandoned. Only a final report can tell those apart.`}
+          ? `${fmt(unreturned)} ballots were issued and never came back${
+              t.undeliverable != null ? `, of which ${fmt(t.undeliverable)} were undeliverable` : ''
+            }.`
+          : 'Coverage stops before Election Day, so most mail ballots were still outstanding.'}
       />
     </div>
   );
 }
-
-/* ------------------------------------------------------------------
-   LABEL NOTES — why this component restates two of the county's own
-   figures rather than reprinting them.
-
-   "Total Ballots Cast 201,588" is exactly 137,221 + 51,413 + 12,954,
-   i.e. early ballots only. In a report published three days after
-   Election Day, a reader takes "total ballots cast" to include Election
-   Day. It does not. v1 of this site carried the number under that name
-   and every derived stat came out as "100% of ballots were early".
-
-   "% Voted (Turnout) 24.89%" is 201,588 / 809,786 — early-vote share of
-   registration, not turnout. Same trap.
-
-   Both are surfaced here with their arithmetic shown, under names that
-   say what they count. Do not reintroduce the county's labels.
------------------------------------------------------------------- */
