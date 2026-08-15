@@ -25,12 +25,25 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '4.0';
+export const VERSION = '4.1';
 
 export const VERSIONS = [
   {
-    v: '4.0',
+    v: '4.1',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'The county report’s front page, rebuilt',
+    notes: [
+      'Each election page now opens with every figure from the county report’s first page, restated as three proportional bars — one per question the page is actually asking.',
+      'Each percentage is shown against the denominator it is a share of. The county prints eleven of them over three different denominators without labelling any.',
+      'Adds the number the report never states: 21,526 mail ballots — a quarter of every ballot issued — that were never returned.',
+      'Mail-ballot requesters who voted in person instead are now carried through the data pipeline, which is what closes the ballot funnel.',
+      'The county’s “Total Ballots Cast” and “% Voted (Turnout)” labels are shown with their arithmetic rather than reused; both count early ballots only.',
+    ],
+  },
+  {
+    v: '4.0',
+    commit: 'ac4e5f0669ba13b6115c34c5789e3484638179fd',
     date: 'August 2026',
     headline: 'Weather, a day-by-day map, and a rebuilt site grid',
     notes: [

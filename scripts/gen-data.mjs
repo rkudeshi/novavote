@@ -43,7 +43,10 @@ const CYCLES = [
     sourceUrl:
       'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB-Daily-Report-Nov2025.pdf',
     // Published grand totals, asserted below.
-    expect: { inPerson: 137221, returnedMail: 51413, returnedDropbox: 12954, ballotsMailed: 87547 },
+    expect: {
+      inPerson: 137221, returnedMail: 51413, returnedDropbox: 12954,
+      ballotsMailed: 87547, abInPerson: 1654,
+    },
   },
   {
     id: 'fairfax-2024-general',
@@ -202,6 +205,11 @@ function buildCycle(cycle) {
   const mail = readCsv(f('returned_by_mail'));
   const drop = readCsv(f('returned_by_dropbox'));
   const mailed = readCsv(f('mailed_absentee_ballots'));
+  /* Mail-ballot requesters who showed up and voted in person instead.
+     This is the one number that closes the ballot funnel: without it a
+     mailed ballot that was never returned is indistinguishable from one
+     whose requester voted another way. */
+  const abApp = readCsv(f('ab_applicants_voted_early_in_person'));
 
   if (!early) throw new Error(`gen-data: no early-voting CSV for ${cycle.id} (${f('early_in_person_by_site')})`);
 
@@ -236,12 +244,16 @@ function buildCycle(cycle) {
   const mailTotalCol = mail && pick(mail[0], ['total_returned']);
   const dropTotalCol = drop && pick(drop[0], ['total_returned_dropbox']);
   const mailedTotalCol = mailed && pick(mailed[0], ['total_mailed']);
+  const abTotalCol = abApp && pick(abApp[0], ['total']);
+  // 2023's report has no undeliverable column at all — optional, not zero.
+  const undelivCol = mail && pick(mail[0], ['undeliverable_subset_of_mail', 'undeliverable']);
 
   const byDate = (rows) => Object.fromEntries((rows || []).map((r) => [r.date, r]));
   const earlyBy = byDate(early);
   const mailBy = byDate(mail);
   const dropBy = byDate(drop);
   const mailedBy = byDate(mailed);
+  const abBy = byDate(abApp);
 
   const allDates = [...new Set([
     ...Object.keys(earlyBy), ...Object.keys(mailBy),
@@ -265,6 +277,7 @@ function buildCycle(cycle) {
       returnedMail: mailBy[d] && mailTotalCol ? num(mailBy[d][mailTotalCol]) : null,
       returnedDropbox: dropBy[d] && dropTotalCol ? num(dropBy[d][dropTotalCol]) : null,
       ballotsMailed: mailedBy[d] && mailedTotalCol ? num(mailedBy[d][mailedTotalCol]) : null,
+      abInPerson: abBy[d] && abTotalCol ? num(abBy[d][abTotalCol]) : null,
     };
   });
 
@@ -276,6 +289,11 @@ function buildCycle(cycle) {
     returnedMail: mailTotalCol ? sum(mail, mailTotalCol) : 0,
     returnedDropbox: dropTotalCol ? sum(drop, dropTotalCol) : 0,
     ballotsMailed: mailedTotalCol ? sum(mailed, mailedTotalCol) : 0,
+    abInPerson: abTotalCol ? sum(abApp, abTotalCol) : 0,
+    /* Undeliverable is best-effort on 14 of 2025's dates (see
+       data/README.md) and absent entirely from 2023, so it is carried
+       as null rather than 0 when the column does not exist. */
+    undeliverable: undelivCol ? sum(mail, undelivCol) : null,
   };
 
   // Where published grand totals are known, a mismatch fails the build
