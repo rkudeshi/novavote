@@ -150,6 +150,42 @@ const pick = (row, names) => {
   return null;
 };
 
+const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/**
+ * Resolve opening hours per (site, date) from data/site_schedules.json.
+ *
+ * Returns null when a cycle has no schedule configured at all, which the
+ * UI reads as "the per-hour view isn't available yet" — deliberately
+ * distinct from "open zero hours".
+ */
+function buildSchedule(cycleId, days, siteKeys) {
+  const file = path.join(ROOT, 'data', 'site_schedules.json');
+  if (!existsSync(file)) return { hours: null, gaps: [] };
+  const conf = JSON.parse(readFileSync(file, 'utf8')).cycles?.[cycleId];
+  if (!conf) return { hours: null, gaps: [] };
+
+  const hours = {};
+  const gaps = [];
+  for (const key of siteKeys) {
+    for (const d of days) {
+      if (d.sites[key] == null) continue;
+      const dow = DOW[new Date(`${d.date}T00:00:00`).getDay()];
+      const v =
+        conf.overrides?.[key]?.[d.date] ??
+        conf.byDate?.[d.date] ??
+        conf.bySite?.[key]?.[dow] ??
+        conf.byDayOfWeek?.[dow];
+      if (v == null) {
+        gaps.push(`${key} ${d.date}`);
+        continue;
+      }
+      (hours[key] ||= {})[d.date] = v;
+    }
+  }
+  return { hours, gaps };
+}
+
 function buildCycle(cycle) {
   const base = path.join(ROOT, cycle.dir);
   const f = (name) => path.join(base, `${cycle.prefix || ''}${name}.csv`);
@@ -276,6 +312,16 @@ function buildCycle(cycle) {
     ? Math.round((new Date(cycle.electionDate) - new Date(dataThrough)) / MS)
     : null;
 
+  const { hours, gaps } = buildSchedule(
+    cycle.id, days, sites.map((s) => s.key),
+  );
+  if (gaps.length) {
+    console.warn(
+      `gen-data: ${cycle.id} has a schedule but no hours for ${gaps.length} ` +
+        `site-days (e.g. ${gaps.slice(0, 3).join(', ')}) — those cells will be blank per-hour`,
+    );
+  }
+
   const { expect, dir, prefix, ...meta } = cycle;
   return {
     ...meta,
@@ -283,6 +329,7 @@ function buildCycle(cycle) {
     totals,
     sites,
     days,
+    hours,
   };
 }
 

@@ -105,15 +105,15 @@ export default function Election({ ds, all }) {
 
           <section className="section">
             <div className="wrap">
-              <div className="eyebrow">Site rhythm</div>
+              <div className="eyebrow">Site by day</div>
               <h2 className="h2" style={{ marginBottom: 8 }}>
-                Which sites ran early, and which ran late
+                Every site, every day
               </h2>
               <p className="note" style={{ marginBottom: 22 }}>
-                Every site rises into Election Day, so plotting raw ballots just
-                redraws the calendar sixteen times. This shows each site's share
-                of a given day against its share of the whole cycle — the shared
-                trend divided out, leaving only what makes each site different.
+                Switch what each cell measures — raw ballots, a running total,
+                a share, or how each site moved against its own norm. Raw counts
+                answer "how many"; the normalised views are what let a busy site
+                and a quiet one be compared on the same footing.
               </p>
               <div className="card">
                 <SiteRhythm ds={ds} />
