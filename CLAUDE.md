@@ -59,6 +59,18 @@ no rewrite rules, so `vite.config.js` copies `index.html` to `404.html` at
 build time — Pages serves that for any deep path and the app boots and
 reads `location.pathname`. Don't switch to hash routing without a reason.
 
+**Deploy path**: the site is served at the root of its own subdomain,
+`novavote.raviudeshi.com`, so `base` in `vite.config.js` is `/` and
+`public/CNAME` carries the domain into the built artifact. It was
+`/novavote/` while the site sat at `raviudeshi.com/novavote/` — a project
+repo is served under its repo name only on `<user>.github.io` or a
+*user-site* apex domain; give the repo its own custom domain and Pages
+serves it from that domain's root. `base` tracks where the site is
+**served**, not what the repo is called, and getting it wrong renders a
+blank page: the HTML loads and every asset URL 404s. If the domain
+changes again, `base`, `public/CNAME` and the archive `--base` in
+`deploy.yml` all move together.
+
 **The visualisations, and why they are what they are.** v1's signature
 site x day oval grid was removed. It failed structurally: early voting
 follows the same arc everywhere, so every row was a copy of the county
@@ -210,7 +222,7 @@ change bumps the major (2.x -> 3.0), a **smaller** change bumps the minor
 Past releases are archived as **real builds of the commit they shipped
 from**, served at `/versions/<v>/`. `deploy.yml` reads the list out of
 `version.js`, checks out each commit in a git worktree, and builds it with
-`--base /novavote/versions/<v>/`. They are genuine frozen snapshots: an
+`--base /versions/<v>/`. They are genuine frozen snapshots: an
 archived version cannot be broken by a later refactor, needs no CSS
 scoping against the current app, and shows the data as it stood then.
 
