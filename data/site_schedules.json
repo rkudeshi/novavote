@@ -1,26 +1,189 @@
 {
   "_comment": [
-    "Opening hours per early-voting site, used for the 'ballots per hour open'",
-    "view in the site grid. Empty until real schedule data is added — the UI",
-    "shows that view as unavailable rather than inventing an hours figure.",
+    "Scheduled opening hours for Fairfax early-voting sites, November general",
+    "elections 2020-2025. Source: Fairfax County Electoral Board records and",
+    "General Registrar's reports, supplied by someone who worked in the office.",
     "",
-    "Resolution order for a given (site, date), first match wins:",
-    "  1. cycles.<id>.overrides[<siteKey>][<YYYY-MM-DD>]   — one site, one day",
-    "  2. cycles.<id>.byDate[<YYYY-MM-DD>]                 — all sites, one day",
-    "  3. cycles.<id>.bySite[<siteKey>][<dow>]             — one site, weekday",
-    "  4. cycles.<id>.byDayOfWeek[<dow>]                   — all sites, weekday",
+    "Shape: each cycle has ordered `groups`. For a given (site, date) the LAST",
+    "matching group wins, where a group matches when its `sites` list contains",
+    "the site (or is \"*\") and the date falls within from..to inclusive. Within",
+    "the matched group, the block for that day of week supplies open/close.",
+    "Ordering is what expresses 'everyone does X, except the Government Center',",
+    "so keep the Government Center group last in each cycle.",
     "",
-    "<dow> is one of sun mon tue wed thu fri sat. Values are hours open as a",
-    "number (7.5 is fine). A site with no match on a date it recorded ballots",
-    "is reported by the build rather than silently skipped.",
+    "A block absent for a day of week means no scheduled hours — which is",
+    "correct for Sundays before 2021, when the county offered no Sunday voting.",
+    "Whether a site was actually open on a date comes from the ballot data, not",
+    "from here: a site with no ballots recorded is never asked for hours. That",
+    "is why Great Falls in 2020 needs no special casing — it only ever recorded",
+    "ballots on three Saturdays.",
     "",
-    "Example once you have the data:",
-    "  \"fairfax-2025-general\": {",
-    "    \"byDayOfWeek\": { \"mon\": 8, \"tue\": 8, \"wed\": 8, \"thu\": 8, \"fri\": 8, \"sat\": 5, \"sun\": 0 },",
-    "    \"byDate\": { \"2025-11-01\": 12 },",
-    "    \"bySite\": { \"government_center\": { \"sat\": 8 } },",
-    "    \"overrides\": { \"mclean\": { \"2025-10-25\": 6 } }",
-    "  }"
+    "Times are local, 24-hour, \"HH:MM\". Hours open are computed from them."
   ],
-  "cycles": {}
+  "cycles": {
+    "fairfax-2020-general": {
+      "electionDate": "2020-11-03",
+      "note": "The Government Center ran 8:00-4:30 until the satellites opened on 14 October, then extended to 7:00 pm. Satellites opened at 11:00 am instead of 1:00 pm for the final Thursday and Friday because of heavy turnout. No Sunday voting this cycle.",
+      "groups": [
+        {
+          "label": "Satellite locations",
+          "sites": "*",
+          "from": "2020-09-18",
+          "to": "2020-10-28",
+          "weekday": ["13:00", "19:00"],
+          "sat": ["09:00", "17:00"]
+        },
+        {
+          "label": "Satellite locations — extended for the final Thursday and Friday",
+          "sites": "*",
+          "from": "2020-10-29",
+          "to": "2020-10-30",
+          "weekday": ["11:00", "19:00"]
+        },
+        {
+          "label": "Satellite locations — last Saturday",
+          "sites": "*",
+          "from": "2020-10-31",
+          "to": "2020-10-31",
+          "sat": ["09:00", "17:00"]
+        },
+        {
+          "label": "Government Center — before the satellites opened",
+          "sites": ["government_center"],
+          "from": "2020-09-18",
+          "to": "2020-10-13",
+          "weekday": ["08:00", "16:30"],
+          "sat": ["09:00", "17:00"]
+        },
+        {
+          "label": "Government Center — extended hours from 14 October",
+          "sites": ["government_center"],
+          "from": "2020-10-14",
+          "to": "2020-10-31",
+          "weekday": ["08:00", "19:00"],
+          "sat": ["09:00", "17:00"]
+        }
+      ]
+    },
+    "fairfax-2021-general": {
+      "electionDate": "2021-11-02",
+      "note": "The county's first cycle with Sunday voting, on 24 October. Thirteen further locations opened 21 October.",
+      "groups": [
+        {
+          "label": "All locations except the Government Center",
+          "sites": "*",
+          "from": "2021-09-17",
+          "to": "2021-10-30",
+          "weekday": ["13:00", "19:00"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        },
+        {
+          "label": "Government Center",
+          "sites": ["government_center"],
+          "from": "2021-09-17",
+          "to": "2021-10-30",
+          "weekday": ["08:00", "16:30"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        }
+      ]
+    },
+    "fairfax-2022-general": {
+      "electionDate": "2022-11-08",
+      "note": "Essentially the 2021 schedule repeated. Thirteen further locations opened 27 October; Sunday voting on 30 October.",
+      "groups": [
+        {
+          "label": "All locations except the Government Center",
+          "sites": "*",
+          "from": "2022-09-23",
+          "to": "2022-11-05",
+          "weekday": ["13:00", "19:00"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        },
+        {
+          "label": "Government Center",
+          "sites": ["government_center"],
+          "from": "2022-09-23",
+          "to": "2022-11-05",
+          "weekday": ["08:00", "16:30"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        }
+      ]
+    },
+    "fairfax-2023-general": {
+      "electionDate": "2023-11-07",
+      "note": "Thirteen further locations opened 26 October, after which all sixteen ran for ten consecutive days. Sunday voting on 29 October.",
+      "groups": [
+        {
+          "label": "All locations except the Government Center",
+          "sites": "*",
+          "from": "2023-09-22",
+          "to": "2023-11-04",
+          "weekday": ["13:00", "19:00"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        },
+        {
+          "label": "Government Center",
+          "sites": ["government_center"],
+          "from": "2023-09-22",
+          "to": "2023-11-04",
+          "weekday": ["08:00", "16:30"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        }
+      ]
+    },
+    "fairfax-2024-general": {
+      "electionDate": "2024-11-05",
+      "note": "A presidential cycle, so the thirteen further locations opened earlier than usual — 17 October — leaving all sixteen open for the final sixteen days. Sunday voting on 27 October.",
+      "groups": [
+        {
+          "label": "All locations except the Government Center",
+          "sites": "*",
+          "from": "2024-09-20",
+          "to": "2024-11-02",
+          "weekday": ["13:00", "19:00"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        },
+        {
+          "label": "Government Center",
+          "sites": ["government_center"],
+          "from": "2024-09-20",
+          "to": "2024-11-02",
+          "weekday": ["08:00", "16:30"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        }
+      ]
+    },
+    "fairfax-2025-general": {
+      "electionDate": "2025-11-04",
+      "note": "Thirteen further locations opened 23 October and ran for ten consecutive days. Sunday voting on 26 October.",
+      "groups": [
+        {
+          "label": "All locations except the Government Center",
+          "sites": "*",
+          "from": "2025-09-19",
+          "to": "2025-11-01",
+          "weekday": ["13:00", "19:00"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        },
+        {
+          "label": "Government Center",
+          "sites": ["government_center"],
+          "from": "2025-09-19",
+          "to": "2025-11-01",
+          "weekday": ["08:00", "16:30"],
+          "sat": ["09:00", "17:00"],
+          "sun": ["13:00", "17:00"]
+        }
+      ]
+    }
+  }
 }

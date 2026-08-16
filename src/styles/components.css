@@ -813,3 +813,39 @@
 @media (prefers-reduced-motion: reduce) {
   .hero-word { animation: none !important; }
 }
+
+/* ------------------------- voting hours ------------------------- */
+.sched { display: grid; gap: 22px; }
+.sched-grp + .sched-grp { border-top: 1px solid var(--line); padding-top: 22px; }
+.sched-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.sched-title {
+  font-family: var(--font-display); font-size: 17px; font-weight: 600;
+  margin: 0; color: var(--ink); letter-spacing: -.01em;
+}
+.sched-range {
+  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.sched-tbl { width: 100%; border-collapse: collapse; }
+.sched-tbl th {
+  text-align: left; font-weight: 400; font-size: 13.5px; color: var(--ink-2);
+  padding: 5px 0; width: 110px;
+}
+.sched-span {
+  font-family: var(--font-mono); font-size: 13px; color: var(--ink);
+  font-variant-numeric: tabular-nums; padding: 5px 0;
+}
+.sched-hrs {
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--muted);
+  text-align: right; font-variant-numeric: tabular-nums; padding: 5px 0;
+}
+.sched-note {
+  margin: 4px 0 0; font-size: 13px; color: var(--muted);
+  padding-left: 13px; border-left: 2px solid var(--line-strong);
+}
+@media (max-width: 640px) {
+  .sched-tbl th { width: 88px; font-size: 12.5px; }
+  .sched-span { font-size: 12px; }
+}

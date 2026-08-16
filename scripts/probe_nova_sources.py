@@ -24,6 +24,16 @@ UA = {"User-Agent": "Mozilla/5.0 (NovaVote data survey)"}
 
 EVENT = "2025 November General"
 
+# Early-voting schedules: the county publishes hours as prose on its
+# elections pages, and the Wayback CDX API is how past cycles' versions of
+# those pages are found. Neither host is reachable from the dev sandbox.
+SCHEDULE = [
+    "https://www.fairfaxcounty.gov/elections/early-voting",
+    "https://fairfaxvotes.org/early/",
+    "http://web.archive.org/cdx/search/cdx?url=fairfaxcounty.gov/elections/early-voting&output=json&limit=60&filter=statuscode:200&collapse=timestamp:6",
+    "http://web.archive.org/cdx/search/cdx?url=fairfaxcounty.gov/elections/absentee-locations*&output=json&limit=80&filter=statuscode:200&collapse=urlkey",
+]
+
 CANDIDATES = [
     # ELECT landing pages — harvested for links to the actual data files.
     "https://www.elections.virginia.gov/resultsreports/registrationturnout-statistics/",
@@ -90,7 +100,7 @@ def probe(url):
         if "html" in ctype.lower():
             harvest(url, text)
         else:
-            print(text[:1500], flush=True)
+            print(text[:6000], flush=True)
         return None
 
     OUT.mkdir(exist_ok=True)
@@ -102,7 +112,11 @@ def probe(url):
 
 
 def main():
-    urls = sys.argv[1:] or CANDIDATES
+    args = sys.argv[1:]
+    if args and args[0] == "--schedule":
+        urls = SCHEDULE + args[1:]
+    else:
+        urls = args or CANDIDATES
     for u in urls:
         probe(u)
 

@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '5.3';
+export const VERSION = '5.4';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,20 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '5.3',
+    v: '5.4',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Voting hours, published and divided by',
+    notes: [
+      'Every election page now lists the scheduled opening hours for each group of locations.',
+      'The Government Center opened at 8am while satellites opened at 1pm — most of why it takes a quarter of the in-person vote.',
+      'Ballots per hour works across all six cycles now that real hours exist.',
+      '2020\u2019s mid-cycle changes are carried exactly: the Government Center extending to 7pm on 14 October, and satellites opening at 11am for the final Thursday and Friday.',
+    ],
+  },
+  {
+    v: '5.3',
+    commit: '86e9b539dcc44ff06f61670074836244efbfbbf9',
     date: 'August 2026',
     headline: 'Six years of Fairfax early voting',
     notes: [

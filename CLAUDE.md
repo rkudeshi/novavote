@@ -174,6 +174,20 @@ current one so a renamed site joins across cycles. Providence Community
 Center -> Jim Scott Community Center is the live example. The build errors
 if a single cycle ever lists both.
 
+**Opening hours** (`data/site_schedules.json`) come from Fairfax
+Electoral Board records and Registrar's reports, supplied by someone who
+worked in the office — they are not on any page the site could scrape,
+and county pages are unreachable from the sandbox anyway. Shape is
+ordered `groups`; for a (site, date) the **last matching group wins**,
+which is how "everyone does X, except the Government Center" is expressed
+without repeating fifteen site keys, and how 2020's two mid-cycle
+extensions override the base schedule. Whether a site was *open* on a
+date still comes from the ballot record, never from here — which is why
+Great Falls 2020 needs no special case despite operating three Saturdays
+only. The hours are **published on the page** (`Schedule.jsx`) as well as
+divided by: the Government Center opening at 8am against the satellites'
+1pm is most of why it takes a quarter of the in-person vote.
+
 **Weather** (`data/weather.json`, from `scripts/fetch_weather.py`) is one
 observation per day at the county centroid — not per site. Early voting
 spans ~25 miles and the weather that plausibly moves turnout is regional,

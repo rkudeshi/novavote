@@ -12,6 +12,7 @@ import SiteRhythm from '../components/charts/SiteRhythm.jsx';
 import SiteMap from '../components/charts/SiteMap.jsx';
 import ReportSummary from '../components/charts/ReportSummary.jsx';
 import Treemap from '../components/charts/Treemap.jsx';
+import Schedule from '../components/charts/Schedule.jsx';
 import WeatherIcon from '../components/WeatherIcon.jsx';
 
 /* Sequential ramp for the site treemap — sites are ranked by size, so a
@@ -166,6 +167,21 @@ export default function Election({ ds, all }) {
               </div>
             </div>
           </section>
+
+          {ds.schedule && (
+            <section className="section">
+              <div className="wrap">
+                <h2 className="h2" style={{ marginBottom: 8 }}>Voting hours</h2>
+                <p className="note" style={{ marginBottom: 22 }}>
+                  Scheduled opening hours. Whether a site was open on a given
+                  date comes from the ballot record, not from this schedule.
+                </p>
+                <div className="card">
+                  <Schedule ds={ds} />
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="section">
             <div className="wrap">
