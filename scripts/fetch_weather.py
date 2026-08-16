@@ -16,6 +16,8 @@ Runs in CI — the dev sandbox has no outbound network.
 
 import json
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -70,7 +72,34 @@ WMO = {
 }
 
 
+ATTEMPTS = 4
+
+
 def fetch(lat, lon, start, end):
+    """One archive query, retried on a transient failure.
+
+    Fifty-four windows go out back to back and the archive rate-limits.
+    A single refusal used to take the whole run down, and because the
+    workflow step is non-blocking that showed up as a green step that
+    quietly changed nothing.
+    """
+    last = None
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            return _fetch_once(lat, lon, start, end)
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+            last = e
+            code = getattr(e, "code", None)
+            if code and code not in (408, 429, 500, 502, 503, 504):
+                raise
+            wait = 3 * attempt
+            print(f"      retry {attempt}/{ATTEMPTS} after {e} — waiting {wait}s",
+                  flush=True)
+            time.sleep(wait)
+    raise SystemExit(f"archive request failed after {ATTEMPTS} attempts: {last}")
+
+
+def _fetch_once(lat, lon, start, end):
     q = urllib.parse.urlencode({
         "latitude": f"{lat:.4f}",
         "longitude": f"{lon:.4f}",
@@ -124,7 +153,12 @@ def main():
         sys.exit(f"{CENTROIDS} missing — run scripts/fetch_boundary.py first")
     localities = json.loads(CENTROIDS.read_text())["localities"]
 
-    out = {
+    # Merged into whatever is already there, and written after every
+    # cycle. Fifty-four windows is long enough that a refusal partway
+    # through is a real possibility, and a run that throws away the
+    # fifty it did fetch would never converge.
+    out = json.loads(OUT.read_text()) if OUT.exists() else {}
+    out.update({
         "_comment": (
             "Daily weather for each cycle's early-voting window, one "
             "observation per day at the jurisdiction's centroid, from "
@@ -135,26 +169,44 @@ def main():
         "licence": "Open-Meteo data under CC BY 4.0",
         "centroids": {n: {"lat": c["lat"], "lon": c["lon"]}
                       for n, c in sorted(localities.items())},
-        "cycles": {},
-    }
+    })
+    out.setdefault("cycles", {})
 
-    for name, slug in SLUGS.items():
+    def save():
+        out["cycles"] = dict(sorted(out["cycles"].items()))
+        OUT.write_text(json.dumps(out, indent=2) + "\n")
+
+    wanted = [(f"{slug}-{year}-general", name, year)
+              for name, slug in SLUGS.items() for year in WINDOWS]
+    todo = [w for w in wanted if w[0] not in out["cycles"]]
+    print(f"{len(wanted)} cycles wanted, {len(wanted) - len(todo)} already held, "
+          f"{len(todo)} to fetch", flush=True)
+
+    failed = []
+    for cycle, name, year in todo:
         c = localities.get(name)
         if not c:
             sys.exit(f"no centroid for {name}")
-        print(f"\n== {name}  ({c['lat']:.4f}, {c['lon']:.4f})", flush=True)
-        for year, (start, end) in WINDOWS.items():
-            cycle = f"{slug}-{year}-general"
+        start, end = WINDOWS[year]
+        try:
             days = summarise(fetch(c["lat"], c["lon"], start, end))
-            out["cycles"][cycle] = days
-            wet = sum(1 for v in days.values() if v["wet"])
-            snowy = sum(1 for v in days.values() if v["snowy"])
-            print(f"   {cycle:<28} {len(days):>3} days, {wet:>2} wet, "
-                  f"{snowy:>2} snowy", flush=True)
+        except SystemExit as e:
+            print(f"   {cycle:<28} FAILED: {e}", flush=True)
+            failed.append(cycle)
+            continue
+        out["cycles"][cycle] = days
+        save()
+        wet = sum(1 for v in days.values() if v["wet"])
+        snowy = sum(1 for v in days.values() if v["snowy"])
+        print(f"   {cycle:<28} {len(days):>3} days, {wet:>2} wet, "
+              f"{snowy:>2} snowy", flush=True)
 
-    OUT.write_text(json.dumps(out, indent=2) + "\n")
+    save()
     print(f"\nwrote {OUT}: {len(out['cycles'])} cycles, "
           f"{sum(len(v) for v in out['cycles'].values()):,} days", flush=True)
+    if failed:
+        sys.exit(f"{len(failed)} cycle(s) not fetched: {failed}. "
+                 f"Re-run — what did land is saved.")
 
 
 if __name__ == "__main__":

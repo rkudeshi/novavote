@@ -57,9 +57,17 @@ jobs:
         run: python scripts/fetch_boundary.py
 
       - name: Fetch daily weather
-        # After the boundary fetch: the centroid is derived from it.
+        # After the boundary fetch: the centroids come from it.
+        #
+        # Non-blocking, but never silent: continue-on-error on its own
+        # reports a failed step as green, which is how a weather run that
+        # fetched nothing looked like a success. The script writes after
+        # every cycle, so a partial run keeps what it got and the next
+        # run fills the rest.
         continue-on-error: true
-        run: python scripts/fetch_weather.py
+        run: |
+          python scripts/fetch_weather.py \
+            || echo "::warning::weather fetch exited non-zero — re-run to fill the gaps"
 
       - name: Check registered-voter counts
         # data/registration.json is supplied and committed; this is the
