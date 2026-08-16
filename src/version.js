@@ -44,7 +44,7 @@ export const VERSIONS = [
       'November 2024 for Fairfax is now the end-of-cycle report: 332,981 early ballots, replacing a snapshot that stopped five days in.',
       'Jurisdictions are compared as percentages. Fairfax casts more early ballots than the other eight together, so a chart scaled to raw totals was a chart of how big Fairfax is.',
       'The full data table is now tabbed, one tab per table in the source report, with sub-columns hidden until asked for and column totals pinned to the bottom.',
-      'Early turnout as a share of registered voters now runs across the whole region and back to 2020 \u2014 Falls Church City voted 39% early in 2025, Loudoun 25%.',
+      'Early turnout as a share of registered voters now runs across every jurisdiction and back to 2020 \u2014 Falls Church City voted 37% early in 2025, Manassas Park City 20%.',
       '\u201cCast in the final week\u201d no longer counts mail processed after Election Day.',
     ],
   },

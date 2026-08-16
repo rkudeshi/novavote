@@ -2,10 +2,11 @@
 """Check data/registration.json against the state's own turnout files.
 
 This **writes nothing**. `data/registration.json` is supplied directly
-and is the authority for active registered voters; this is the second
-opinion on it. The state publishes one CSV per election with a row per
-**precinct**, and summed by locality its registration columns are an
-independent count of the same thing.
+and is the authority for registered voters; this is the second opinion on
+it. The state publishes one CSV per election with a row per **precinct**,
+and summed by locality its registration columns are an independent count
+of the same thing. Both columns are compared: the site divides by the
+total (active + inactive), and the active count is carried alongside.
 
 Coverage is partial and that is expected: the turnout directory carries
 November generals for 2020, 2021 and 2022 and nothing later — nothing in
@@ -36,11 +37,14 @@ UA = {"User-Agent": "Mozilla/5.0 (NovaVote data survey)"}
 TIMEOUT = 40
 TABLE = Path("data/registration.json")
 
-# How far the two may differ before it is worth stopping over. They are
-# both counts of active registrants but not necessarily on the same day,
-# and a few weeks of registration either side of an election moves the
-# figure by a fraction of a percent.
+# How far the two may differ before it is worth flagging. They count the
+# same thing but not necessarily on the same day, and a few weeks of
+# registration either side of an election moves the figure by a fraction
+# of a percent.
 TOLERANCE = 0.03
+
+# Field in registration.json -> the summed column it should match.
+COMPARE = {"registered": "registeredTotal", "active": "registered"}
 
 # Election date -> the year whose November general file to look for. The
 # state's filenames are not uniform ("Turnout-2022 November General.csv"
@@ -224,18 +228,22 @@ def main():
             continue
 
         for name, acc in sorted(state.items()):
-            want = table.get(date, {}).get(name, {}).get("registered")
-            if want is None:
-                print(f"   [gap] {name}: state says {acc['registered']:,}, "
-                      f"the table has no figure")
+            entry = table.get(date, {}).get(name)
+            if entry is None:
+                print(f"   [gap] {name}: the table has no figure for this cycle")
                 continue
-            got = acc["registered"]
-            off = abs(got - want) / want
-            checked += 1
-            worst = max(worst, off)
-            if off > TOLERANCE:
-                misses.append(f"{date} {name}: state {got:,} vs table {want:,} "
-                              f"({off * 100:.1f}%)")
+            for field, column in COMPARE.items():
+                want = entry.get(field)
+                got = acc.get(column)
+                if want is None or got is None:
+                    continue
+                off = abs(got - want) / want
+                checked += 1
+                worst = max(worst, off)
+                if off > TOLERANCE:
+                    misses.append(
+                        f"{date} {name} {field}: state {got:,} vs table "
+                        f"{want:,} ({off * 100:.1f}%)")
 
     print(f"\n-- {checked} figures compared, worst {worst * 100:.2f}% apart")
     if misses:

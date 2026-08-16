@@ -33,7 +33,6 @@ const CYCLES = [
     electionDate: '2025-11-04',
     reportDate: '2025-11-07',
     status: 'Final (county-labeled unofficial)',
-    registeredVoters: 809786,
     // NOTE: v1 carried `totalBallotsCast: 201588` and `turnoutPct: 24.89`.
     // Both were mislabelled — 201,588 is exactly the early-vote sum
     // (137,221 + 51,413 + 12,954) and 24.89% is that over registered
@@ -90,7 +89,6 @@ const CYCLES = [
     electionDate: '2023-11-07',
     reportDate: '2023-11-04',
     status: 'Final (county-labeled unofficial)',
-    registeredVoters: 717440,
     coverage: { complete: true },
     sourceFile: 'data/sources/fairfax-2023-11-final-ab-daily-report.xlsx',
     expect: {
@@ -110,7 +108,6 @@ const CYCLES = [
     electionDate: '2022-11-08',
     reportDate: '2022-11-08',
     status: 'Final (county-labeled unofficial)',
-    registeredVoters: 735000,
     coverage: { complete: true },
     sourceFile: 'data/sources/fairfax-2022-11-final-ab-daily-report.xlsx',
     expect: {
@@ -130,7 +127,6 @@ const CYCLES = [
     electionDate: '2021-11-02',
     reportDate: '2021-11-05',
     status: 'Final (county-labeled unofficial)',
-    registeredVoters: 730300,
     coverage: { complete: true },
     sourceFile: 'data/sources/fairfax-2021-11-final-ab-daily-report.xlsx',
     expect: {
@@ -150,11 +146,6 @@ const CYCLES = [
     electionDate: '2020-11-03',
     reportDate: '2020-11-03',
     status: 'Final (county-labeled unofficial)',
-    // 2020's own report has no Active Voters line. It no longer sits out
-    // the share-of-electorate views for that reason: the state's own 2020
-    // file supplies the figure (data/registration.json), which is that
-    // year's real count rather than a neighbouring year's borrowed.
-    registeredVoters: null,
     coverage: { complete: true },
     sourceFile: 'data/sources/fairfax-2020-11-final-ab-daily-report.xlsx',
     // Mail and drop-box totals are the daily sheets' own; 2020's Summary
@@ -424,24 +415,26 @@ const pick = (row, names) => {
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 /**
- * Active registered voters per locality per election.
+ * Registered voters per locality per election.
  *
- * `data/registration.json`, supplied directly. It is the authority for
- * this figure, ahead of a cycle's own `registeredVoters`, because it is
- * one consistent active-voter series across every locality and year —
- * and consistency is the whole point of a column whose job is to compare
- * a county of 760,000 with a city of 11,000. A per-cycle figure from a
- * different publisher with a different definition would make the column
+ * `data/registration.json`, supplied directly and the sole source for
+ * this figure — no cycle carries its own any more. One consistent series
+ * across every locality and year is the whole point of a column whose
+ * job is to compare a county of 800,000 with a city of 12,000; a
+ * per-cycle figure from a different publisher would make the column
  * compare definitions instead of places.
  *
- * That ordering matters most for Fairfax 2025, where the county's own
- * report prints 809,786 against the table's 760,554 — 6% apart, where
- * every other Fairfax year agrees to about 1%. 809,786 is almost
- * certainly *total* registrants rather than active: Fairfax's
- * active-to-total ratio in the state's own 2022 per-precinct file is
- * 0.9424, and 809,786 x 0.9424 is 763,113, which is the supplied figure
- * to within half a percent. The per-cycle values are kept below as a
- * fallback for any cycle the table does not reach.
+ * The figure used is the **total** — active plus inactive. An inactive
+ * registrant is still a registered voter who can turn up and vote, so
+ * they belong in the denominator.
+ *
+ * That choice also resolves what looked like a bad Fairfax figure. The
+ * county's own report prints 809,786 for 2025, which is 7% above the
+ * supplied *active* count of 754,532 but within 0.14% of the supplied
+ * *total* of 808,667 — the county's line is a total. It is not a total
+ * in every year: for 2021, 2022 and 2023 the same line matches the
+ * active count instead. That inconsistency across the county's own years
+ * is the reason nothing here reads it.
  */
 const REGISTRATION = (() => {
   const file = path.join(ROOT, 'data', 'registration.json');
@@ -761,7 +754,7 @@ function buildCycle(cycle) {
   const reg = registrationFor(cycle);
   return {
     ...meta,
-    registeredVoters: reg?.registered ?? cycle.registeredVoters ?? null,
+    registeredVoters: reg?.registered ?? null,
     /* Derived from the columns this cycle's report actually has, not
        assumed. A report cycle normally fills all four, but 2022's has no
        surrendered-ballot section and there is no reason for the page to
@@ -859,7 +852,7 @@ function buildLocalityCycle(cycle) {
   return {
     ...meta,
     reportDate: dataThrough,
-    registeredVoters: reg?.registered ?? cycle.registeredVoters ?? null,
+    registeredVoters: reg?.registered ?? null,
     detail: { sites: false, returnRoute: false, ballotsIssued: false, surrendered: false },
     coverage: {
       ...cycle.coverage,
