@@ -40,10 +40,7 @@ WINDOWS = {
     2025: ("2025-09-15", "2025-11-16"),
 }
 
-# Locality -> the slug its cycle ids use. Fairfax is the only one with
-# cycles back to 2020; the rest start in 2023 (see LOCALITY_ELECTIONS in
-# scripts/gen-data.mjs). Fetching a window a locality has no cycle for
-# costs one request and means a new cycle needs no change here.
+# Locality -> the slug its cycle ids use.
 SLUGS = {
     "Fairfax County": "fairfax",
     "Loudoun County": "loudoun",
@@ -176,8 +173,24 @@ def main():
         out["cycles"] = dict(sorted(out["cycles"].items()))
         OUT.write_text(json.dumps(out, indent=2) + "\n")
 
-    wanted = [(f"{slug}-{year}-general", name, year)
-              for name, slug in SLUGS.items() for year in WINDOWS]
+    # Only the cycles that exist. Fairfax has six; every other locality
+    # has the three the daily-file archive covers, and its parsed CSVs
+    # are the record of which. Fetching the whole grid instead was 54
+    # requests against a rate-limited archive, 21 of them for cycles
+    # nothing would ever read.
+    wanted = []
+    for name, slug in SLUGS.items():
+        for year in WINDOWS:
+            cycle = f"{slug}-{year}-general"
+            exists = (
+                Path(f"data/parsed/{cycle}_dal_daily.csv").exists()
+                or Path(f"data/parsed/{cycle}_early_in_person_by_site.csv").exists()
+                or (slug == "fairfax" and year == 2025)   # hand-built CSVs, flat layout
+            )
+            if exists:
+                wanted.append((cycle, name, year))
+    if not wanted:
+        sys.exit("no cycles found in data/parsed — nothing to fetch weather for")
     todo = [w for w in wanted if w[0] not in out["cycles"]]
     print(f"{len(wanted)} cycles wanted, {len(wanted) - len(todo)} already held, "
           f"{len(todo)} to fetch", flush=True)

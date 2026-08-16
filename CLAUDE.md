@@ -280,14 +280,30 @@ divided by: the Government Center opening at 8am against the satellites'
 1pm is most of why it takes a quarter of the in-person vote.
 
 **Weather** (`data/weather.json`, from `scripts/fetch_weather.py`) is one
-observation per day at the county centroid — not per site. Early voting
-spans ~25 miles and the weather that plausibly moves turnout is regional,
-so a county-level series is both honest and sufficient. Open-Meteo's ERA5
-archive, free and key-less. `wet` (>=0.25in) and `snowy` are precomputed
-so the UI doesn't re-derive that judgement. It appears in the map
-scrubber, the grid read-out and the full table. The fetch window must run
+observation per day per **jurisdiction**, at that jurisdiction's centroid
+— not per site. Early voting spans ~25 miles inside Fairfax alone and the
+weather that plausibly moves turnout is regional, so one point per
+locality is both honest and sufficient; per-site would imply a precision
+the measure does not have. Open-Meteo's ERA5 archive, free and key-less.
+`wet` (>=0.25in) and `snowy` are precomputed so the UI doesn't re-derive
+that judgement. It appears in the map scrubber, the grid read-out, the
+daily-ballots tooltip and the full table. The fetch window must run
 *past* Election Day — reports carry post-election rows while late mail
 arrives (2023 has rows through 11/13).
+
+Centroids come from `data/locality_centroids.json`, which
+`scripts/fetch_boundary.py` derives from the same Census county file it
+already downloads — Virginia's independent cities are county-equivalents
+there, so every tracked jurisdiction is in it and no coordinate is typed
+in by hand.
+
+The fetch is **resumable and never silent**. Fifty-four windows go out
+back to back and the archive rate-limits, so requests retry with backoff,
+the file is merged rather than replaced, and it is written after every
+cycle. The workflow step is non-blocking but echoes a warning annotation
+on a non-zero exit: `continue-on-error` on its own reports a failed step
+as green, which is exactly how a run that fetched nothing once looked
+like a success.
 
 **Final reports are xlsx, daily reports are PDFs.** `scripts/parse_xlsx_report.py`
 handles the county's end-of-cycle workbooks (Nov 2020-2023, archived in
