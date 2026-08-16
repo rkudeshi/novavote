@@ -240,35 +240,76 @@ const WEATHER = (() => {
 /**
  * Resolve opening hours per (site, date) from data/site_schedules.json.
  *
- * Returns null when a cycle has no schedule configured at all, which the
- * UI reads as "the per-hour view isn't available yet" — deliberately
- * distinct from "open zero hours".
+ * Ordered groups, last match wins: a group applies when its `sites` list
+ * contains the site (or is "*") and the date falls in from..to. That
+ * ordering is what expresses "everyone does X, except the Government
+ * Center" without repeating fifteen site keys, and what lets 2020's
+ * mid-cycle extensions override the base schedule for two days.
+ *
+ * Returns hours: null when a cycle has no schedule at all, which the UI
+ * reads as "the per-hour view isn't available" — deliberately distinct
+ * from "open zero hours".
  */
+const HHMM = (t) => {
+  const [h, m] = String(t).split(':').map(Number);
+  return h + (m || 0) / 60;
+};
+
+function matchGroup(groups, key, date, dow) {
+  let found = null;
+  for (const g of groups) {
+    const forSite = g.sites === '*' || (g.sites || []).includes(key);
+    if (!forSite) continue;
+    if (g.from && date < g.from) continue;
+    if (g.to && date > g.to) continue;
+    const block = g[dow === 'sat' ? 'sat' : dow === 'sun' ? 'sun' : 'weekday'];
+    if (!block) continue;
+    found = { group: g, block };
+  }
+  return found;
+}
+
 function buildSchedule(cycleId, days, siteKeys) {
   const file = path.join(ROOT, 'data', 'site_schedules.json');
-  if (!existsSync(file)) return { hours: null, gaps: [] };
+  if (!existsSync(file)) return { hours: null, gaps: [], schedule: null };
   const conf = JSON.parse(readFileSync(file, 'utf8')).cycles?.[cycleId];
-  if (!conf) return { hours: null, gaps: [] };
+  if (!conf?.groups?.length) return { hours: null, gaps: [], schedule: null };
 
   const hours = {};
   const gaps = [];
   for (const key of siteKeys) {
     for (const d of days) {
+      // Only days the site actually recorded ballots need hours; "not
+      // open" is a fact the ballot data already carries.
       if (d.sites[key] == null) continue;
       const dow = DOW[new Date(`${d.date}T00:00:00`).getDay()];
-      const v =
-        conf.overrides?.[key]?.[d.date] ??
-        conf.byDate?.[d.date] ??
-        conf.bySite?.[key]?.[dow] ??
-        conf.byDayOfWeek?.[dow];
-      if (v == null) {
+      const hit = matchGroup(conf.groups, key, d.date, dow);
+      if (!hit) {
         gaps.push(`${key} ${d.date}`);
         continue;
       }
-      (hours[key] ||= {})[d.date] = v;
+      const [open, close] = hit.block;
+      (hours[key] ||= {})[d.date] = Math.round((HHMM(close) - HHMM(open)) * 100) / 100;
     }
   }
-  return { hours, gaps };
+
+  /* The schedule is published on the page as well as divided by, so the
+     groups travel with the dataset rather than staying a build-time
+     detail. Hours are what the county scheduled; a site's actual open
+     days come from the ballot data. */
+  const schedule = {
+    note: conf.note || null,
+    groups: conf.groups.map((g) => ({
+      label: g.label,
+      sites: g.sites,
+      from: g.from,
+      to: g.to,
+      weekday: g.weekday || null,
+      sat: g.sat || null,
+      sun: g.sun || null,
+    })),
+  };
+  return { hours, gaps, schedule };
 }
 
 function buildCycle(cycle) {
@@ -424,7 +465,7 @@ function buildCycle(cycle) {
     );
   }
 
-  const { hours, gaps } = buildSchedule(
+  const { hours, gaps, schedule } = buildSchedule(
     cycle.id, days, sites.map((s) => s.key),
   );
   if (gaps.length) {
@@ -442,6 +483,7 @@ function buildCycle(cycle) {
     sites,
     days,
     hours,
+    schedule,
   };
 }
 
