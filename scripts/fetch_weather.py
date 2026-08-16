@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Fetch daily weather for each election cycle's early-voting window.
+"""Fetch daily weather for every cycle's early-voting window.
 
-One observation per day for the county as a whole, taken at the county's
-centroid — not per site. Early voting spans ~25 miles of Fairfax County,
-and the weather that plausibly moves turnout (a washout, a cold snap) is
-regional, so a single county-level series is both honest and enough.
+One observation per day per jurisdiction, taken at that jurisdiction's
+centroid — not per voting site. Early voting spans ~25 miles inside
+Fairfax alone, and the weather that plausibly moves turnout (a washout, a
+cold snap) is regional, so a single point per locality is both honest and
+enough. Sampling per site would imply a precision the measure does not
+have.
 
 Source: Open-Meteo's historical archive (ERA5 reanalysis). Free, no API
 key, no attribution requirement beyond the licence note below.
@@ -19,17 +21,37 @@ import urllib.request
 from pathlib import Path
 
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
-BOUNDARY = Path("src/data/fairfax-boundary.json")
+CENTROIDS = Path("data/locality_centroids.json")
 OUT = Path("data/weather.json")
 UA = {"User-Agent": "NovaVote/1.0 (Virginia early-voting turnout site)"}
 
-# Cycle -> inclusive date range to cover. Runs well past Election Day: the
-# reports carry post-election rows while late mail is still being received
-# (2023 has rows through 11/13), and those days need weather too.
+# Election year -> inclusive date range to cover. Runs well past Election
+# Day: the reports carry post-election rows while late mail is still
+# being received (2023 has rows through 11/13), and those days need
+# weather too.
 WINDOWS = {
-    "fairfax-2023-general": ("2023-09-20", "2023-11-16"),
-    "fairfax-2024-general": ("2024-09-18", "2024-11-14"),
-    "fairfax-2025-general": ("2025-09-17", "2025-11-16"),
+    2020: ("2020-09-16", "2020-11-16"),
+    2021: ("2021-09-15", "2021-11-16"),
+    2022: ("2022-09-21", "2022-11-20"),
+    2023: ("2023-09-18", "2023-11-16"),
+    2024: ("2024-09-16", "2024-11-16"),
+    2025: ("2025-09-15", "2025-11-16"),
+}
+
+# Locality -> the slug its cycle ids use. Fairfax is the only one with
+# cycles back to 2020; the rest start in 2023 (see LOCALITY_ELECTIONS in
+# scripts/gen-data.mjs). Fetching a window a locality has no cycle for
+# costs one request and means a new cycle needs no change here.
+SLUGS = {
+    "Fairfax County": "fairfax",
+    "Loudoun County": "loudoun",
+    "Prince William County": "prince-william",
+    "Arlington County": "arlington",
+    "Alexandria City": "alexandria",
+    "Fairfax City": "fairfax-city",
+    "Falls Church City": "falls-church",
+    "Manassas City": "manassas",
+    "Manassas Park City": "manassas-park",
 }
 
 # WMO weather codes -> short label. Grouped: the point is "was it the kind
@@ -46,25 +68,6 @@ WMO = {
     85: "Snow showers", 86: "Heavy snow showers",
     95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Thunderstorm with hail",
 }
-
-
-def county_centroid():
-    """Area-weighted centroid of the county's largest ring."""
-    doc = json.loads(BOUNDARY.read_text())
-    county = next(f for f in doc["features"] if f["role"] == "county")
-    ring = max(county["rings"], key=len)
-    a = cx = cy = 0.0
-    for (x0, y0), (x1, y1) in zip(ring, ring[1:]):
-        cross = x0 * y1 - x1 * y0
-        a += cross
-        cx += (x0 + x1) * cross
-        cy += (y0 + y1) * cross
-    a *= 0.5
-    if a == 0:
-        xs = [p[0] for p in ring]
-        ys = [p[1] for p in ring]
-        return sum(ys) / len(ys), sum(xs) / len(xs)
-    return cy / (6 * a), cx / (6 * a)      # lat, lon
 
 
 def fetch(lat, lon, start, end):
@@ -92,61 +95,66 @@ def fetch(lat, lon, start, end):
         return json.load(r)
 
 
+def summarise(payload):
+    d = payload["daily"]
+    days = {}
+    for i, date in enumerate(d["time"]):
+        code = d["weather_code"][i]
+        precip = d["precipitation_sum"][i]
+        snow = d["snowfall_sum"][i]
+        days[date] = {
+            "code": code,
+            "label": WMO.get(code, f"code {code}"),
+            "tempMax": d["temperature_2m_max"][i],
+            "tempMin": d["temperature_2m_min"][i],
+            "precip": precip,
+            "rain": d["rain_sum"][i],
+            "snow": snow,
+            "wind": d["wind_speed_10m_max"][i],
+            # Pre-computed so the UI doesn't re-derive a judgement call:
+            # a quarter inch is roughly "you'd notice it queueing".
+            "wet": bool(precip and precip >= 0.25),
+            "snowy": bool(snow and snow > 0),
+        }
+    return days
+
+
 def main():
-    if not BOUNDARY.exists():
-        sys.exit(f"{BOUNDARY} missing — run scripts/fetch_boundary.py first")
-    lat, lon = county_centroid()
-    print(f"county centroid: {lat:.4f}, {lon:.4f}", flush=True)
+    if not CENTROIDS.exists():
+        sys.exit(f"{CENTROIDS} missing — run scripts/fetch_boundary.py first")
+    localities = json.loads(CENTROIDS.read_text())["localities"]
 
     out = {
         "_comment": (
-            "Daily county-level weather for each cycle's early-voting window. "
-            "One observation per day at the county centroid, from Open-Meteo's "
-            "ERA5 archive. Generated by scripts/fetch_weather.py — do not hand-edit."
+            "Daily weather for each cycle's early-voting window, one "
+            "observation per day at the jurisdiction's centroid, from "
+            "Open-Meteo's ERA5 archive. Generated by "
+            "scripts/fetch_weather.py — do not hand-edit."
         ),
         "source": "https://open-meteo.com/ (ERA5 reanalysis)",
         "licence": "Open-Meteo data under CC BY 4.0",
-        "centroid": {"lat": round(lat, 4), "lon": round(lon, 4)},
+        "centroids": {n: {"lat": c["lat"], "lon": c["lon"]}
+                      for n, c in sorted(localities.items())},
         "cycles": {},
     }
 
-    for cycle, (start, end) in WINDOWS.items():
-        print(f"\n== {cycle}  {start} -> {end}", flush=True)
-        payload = fetch(lat, lon, start, end)
-        d = payload["daily"]
-        days = {}
-        for i, date in enumerate(d["time"]):
-            code = d["weather_code"][i]
-            precip = d["precipitation_sum"][i]
-            snow = d["snowfall_sum"][i]
-            days[date] = {
-                "code": code,
-                "label": WMO.get(code, f"code {code}"),
-                "tempMax": d["temperature_2m_max"][i],
-                "tempMin": d["temperature_2m_min"][i],
-                "precip": precip,
-                "rain": d["rain_sum"][i],
-                "snow": snow,
-                "wind": d["wind_speed_10m_max"][i],
-                # Pre-computed so the UI doesn't re-derive a judgement call:
-                # a quarter inch is roughly "you'd notice it queueing".
-                "wet": bool(precip and precip >= 0.25),
-                "snowy": bool(snow and snow > 0),
-            }
-        out["cycles"][cycle] = days
+    for name, slug in SLUGS.items():
+        c = localities.get(name)
+        if not c:
+            sys.exit(f"no centroid for {name}")
+        print(f"\n== {name}  ({c['lat']:.4f}, {c['lon']:.4f})", flush=True)
+        for year, (start, end) in WINDOWS.items():
+            cycle = f"{slug}-{year}-general"
+            days = summarise(fetch(c["lat"], c["lon"], start, end))
+            out["cycles"][cycle] = days
+            wet = sum(1 for v in days.values() if v["wet"])
+            snowy = sum(1 for v in days.values() if v["snowy"])
+            print(f"   {cycle:<28} {len(days):>3} days, {wet:>2} wet, "
+                  f"{snowy:>2} snowy", flush=True)
 
-        wet = [k for k, v in days.items() if v["wet"]]
-        snowy = [k for k, v in days.items() if v["snowy"]]
-        print(f"   {len(days)} days; {len(wet)} with >=0.25in precip; "
-              f"{len(snowy)} with snow", flush=True)
-        if wet:
-            print(f"   wettest: " + ", ".join(
-                f"{k} ({days[k]['precip']:.2f}in {days[k]['label']})"
-                for k in sorted(wet, key=lambda k: -days[k]["precip"])[:5]), flush=True)
-
-    OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, indent=2) + "\n")
-    print(f"\nwrote {OUT} ({OUT.stat().st_size:,} bytes)", flush=True)
+    print(f"\nwrote {OUT}: {len(out['cycles'])} cycles, "
+          f"{sum(len(v) for v in out['cycles'].values()):,} days", flush=True)
 
 
 if __name__ == "__main__":

@@ -128,7 +128,7 @@ jobs:
           # path that does not exist aborts the whole command and stages
           # nothing, so one step that failed to produce its output would
           # silently throw away every other step's.
-          for p in data/sources data/parsed \
+          for p in data/sources data/parsed data/locality_centroids.json \
                    data/site_locations.json data/weather.json \
                    src/data/fairfax-boundary.json src/fonts src/styles/fonts.css; do
             [ -e "$p" ] && git add "$p" || echo "no $p to add"

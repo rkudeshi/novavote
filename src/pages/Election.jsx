@@ -4,7 +4,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Link } from '../lib/router.jsx';
-import { fmt, fullDate, pct, shortDate } from '../lib/format.js';
+import { fmt, fullDate, longDate, pct, shortDate } from '../lib/format.js';
 import { summary, timeline } from '../lib/derive.js';
 import { useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
@@ -14,6 +14,7 @@ import ReportSummary from '../components/charts/ReportSummary.jsx';
 import Treemap from '../components/charts/Treemap.jsx';
 import Schedule from '../components/charts/Schedule.jsx';
 import SourceTables from '../components/charts/SourceTables.jsx';
+import WeatherIcon from '../components/WeatherIcon.jsx';
 
 /* Sequential ramp for the site treemap — sites are ranked by size, so a
    single hue stepped light-to-dark encodes that order; a categorical
@@ -47,27 +48,65 @@ const METHODS = [
   { key: 'returnedDropbox', label: 'Returned by drop box', color: 'var(--s3)', hex: '#1baf7a' },
 ];
 
+/* Metrics for "How the vote came in". Counts lead, because the first
+   question about a day is how many ballots it took. */
+const SURGE_METRICS = [
+  {
+    key: 'value',
+    label: 'Ballots that day',
+    blurb: "Ballots recorded that day, all methods.",
+    counts: true,
+  },
+  {
+    key: 'cumulative',
+    label: 'Banked to date',
+    blurb: 'Ballots recorded by the end of that day, running total.',
+    counts: true,
+  },
+  {
+    key: 'share',
+    label: 'Daily share',
+    blurb: "Each day's ballots as a share of that cycle's whole early vote.",
+  },
+  {
+    key: 'electorateShare',
+    label: 'Share of electorate',
+    blurb: 'Ballots that day as a percentage of registered voters.',
+  },
+];
+
 /**
- * What this election is worth comparing against.
+ * What this election is worth comparing against, which depends on what
+ * is being measured.
  *
- * A jurisdiction with several cycles compares against its own past —
- * that is the question its page is asking. One with a single cycle
- * compares against the other jurisdictions that voted the same day.
- * Passing every dataset to both would put fourteen curves on one chart
- * and answer neither.
+ * **Counts compare a place with itself over time; shares compare places
+ * with each other.** Fairfax casts more early ballots than the other
+ * eight jurisdictions together, so a chart of raw counts across
+ * jurisdictions is a chart of how big Fairfax is and every other curve
+ * flattens against the axis. Against its own past a locality is a fair
+ * comparison in ballots — 2024's presidential surge against two off
+ * years is the whole point — so a count metric swaps the peer set to
+ * this locality's other cycles.
  */
-function peersOf(ds, all) {
+function peersOf(ds, all, counts) {
   const ownHistory = all.filter((d) => d.locality === ds.locality && d.id !== ds.id);
-  if (ownHistory.length) return { peers: ownHistory, kind: 'years' };
-  return {
-    peers: all.filter((d) => d.electionDate === ds.electionDate && d.id !== ds.id),
-    kind: 'places',
-  };
+  const sameDay = all.filter((d) => d.electionDate === ds.electionDate && d.id !== ds.id);
+  if (counts || !sameDay.length) return { peers: ownHistory, kind: 'years' };
+  return { peers: sameDay, kind: 'places' };
 }
 
 export default function Election({ ds, all }) {
   const s = summary(ds);
-  const { peers, kind } = peersOf(ds, all);
+  const [surge, setSurge] = useState('value');
+  const metric = SURGE_METRICS.find((m) => m.key === surge) || SURGE_METRICS[0];
+  const { peers, kind } = peersOf(ds, all, metric.counts);
+  /* Share of the electorate needs a denominator; a cycle without one is
+     dropped rather than drawn at zero. */
+  const shown = [ds, ...peers]
+    .filter((d) => surge !== 'electorateShare' || d.registeredVoters)
+    /* Within one election the year on every label is noise; across a
+       jurisdiction's own cycles it is the whole distinction. */
+    .map((d) => (kind === 'places' ? { ...d, shortLabel: d.shortName } : d));
 
   return (
     <>
@@ -165,16 +204,48 @@ export default function Election({ ds, all }) {
 
       <section className="section">
         <div className="wrap">
-          <h2 className="h2" style={{ marginBottom: 8 }}>How the vote came in</h2>
+          <div className="sec-head">
+            <div>
+              <h2 className="h2">How the vote came in</h2>
+            </div>
+            <div className="seg" role="tablist" aria-label="Measure">
+              {SURGE_METRICS.map((m) => (
+                <button
+                  key={m.key}
+                  role="tab"
+                  aria-selected={surge === m.key}
+                  className={surge === m.key ? 'is-on' : ''}
+                  onClick={() => setSurge(m.key)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className="note" style={{ marginBottom: 22 }}>
-            Each day is plotted by how many days it fell before Election Day, so
+            {metric.blurb} Each day is plotted by how many days it fell before
+            Election Day, so
             {kind === 'years'
               ? ' cycles line up against each other.'
               : ' jurisdictions line up against each other.'}
+            {metric.counts && kind === 'years' && peers.length > 0
+              && ' Counts are compared against this jurisdiction\u2019s own other'
+                 + ' cycles; jurisdictions of different sizes are compared as shares.'}
           </p>
           <div className="card chart-card">
-            <SurgeChart datasets={[ds, ...peers]} metric="share" height={360} />
+            <SurgeChart
+              key={surge}
+              datasets={shown}
+              metric={surge}
+              height={360}
+            />
           </div>
+          {surge === 'electorateShare' && shown.length < peers.length + 1 && (
+            <p className="note" style={{ marginTop: 14 }}>
+              {shown.length} of {peers.length + 1} shown — the rest have no
+              registered-voter count recorded.
+            </p>
+          )}
         </div>
       </section>
 
@@ -263,7 +334,16 @@ function DailyVolume({ ds }) {
   const data = useMemo(() => {
     const run = { inPerson: 0, returnedMail: 0, returnedDropbox: 0 };
     return ds.days.map((d) => {
-      const row = { date: d.date, label: shortDate(d.date) };
+      /* The day of week and the weather ride along on the row so the
+         tooltip can name them. A Saturday and a washout are the two
+         things that most often explain a bar's height, and reading them
+         off the axis label alone is impossible. */
+      const row = {
+        date: d.date,
+        label: shortDate(d.date),
+        weekday: longDate(d.date),
+        weather: d.weather,
+      };
       methods.forEach((m) => {
         const v = d[m.key] || 0;
         run[m.key] += v;
@@ -315,7 +395,7 @@ function DailyVolume({ ds }) {
                 <XAxis dataKey="label" tick={{ fill: '#7C879B', fontSize: 10 }} interval={3}
                        tickLine={false} axisLine={{ stroke: '#CFCBBE' }} />
                 <YAxis tick={{ fill: '#7C879B', fontSize: 10 }} tickLine={false}
-                       axisLine={false} width={54} />
+                       axisLine={false} width={54} tickFormatter={fmt} />
                 <Tooltip content={<Tip />} cursor={{ fill: 'rgba(19,26,43,0.04)' }} />
                 {shown.map((m) => (
                   <Bar key={m.key} dataKey={m.key} stackId="a" fill={m.hex}
@@ -328,7 +408,7 @@ function DailyVolume({ ds }) {
                 <XAxis dataKey="label" tick={{ fill: '#7C879B', fontSize: 10 }} interval={3}
                        tickLine={false} axisLine={{ stroke: '#CFCBBE' }} />
                 <YAxis tick={{ fill: '#7C879B', fontSize: 10 }} tickLine={false}
-                       axisLine={false} width={54} />
+                       axisLine={false} width={54} tickFormatter={fmt} />
                 <Tooltip content={<Tip />} />
                 {shown.map((m) => (
                   <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.hex}
@@ -346,9 +426,18 @@ function DailyVolume({ ds }) {
 function Tip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + (p.value || 0), 0);
+  const row = payload[0]?.payload;
+  const wx = row?.weather;
   return (
     <div className="tip">
-      <div className="tip-h">{label}</div>
+      <div className="tip-h">{row?.weekday || label}</div>
+      {wx && (
+        <div className="tip-wx">
+          <WeatherIcon wet={wx.wet} snowy={wx.snowy} /> {wx.label},{' '}
+          {Math.round(wx.tempMax)}°/{Math.round(wx.tempMin)}°
+          {wx.precip >= 0.01 ? ` · ${wx.precip.toFixed(2)}″` : ''}
+        </div>
+      )}
       {payload.map((p) => (
         <div className="tip-row" key={p.dataKey}>
           <i style={{ background: p.color }} />

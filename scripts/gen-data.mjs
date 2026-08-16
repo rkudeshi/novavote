@@ -465,9 +465,10 @@ const REGISTRATION = (() => {
 const registrationFor = (cycle) =>
   REGISTRATION[cycle.electionDate]?.[cycle.locality] || null;
 
-/* County-level daily weather, one observation per day at the county
-   centroid (see scripts/fetch_weather.py). Attached per day so the UI can
-   put it beside a turnout figure without a second lookup. */
+/* Daily weather per cycle, one observation per day at that
+   jurisdiction's centroid (see scripts/fetch_weather.py). Attached per
+   day so the UI can put it beside a turnout figure without a second
+   lookup. */
 const WEATHER = (() => {
   const file = path.join(ROOT, 'data', 'weather.json');
   if (!existsSync(file)) return {};
@@ -896,7 +897,7 @@ function buildLocalityCycle(cycle) {
 
   const days = kept.map((r) => ({
     date: r.date,
-    weather: null,
+    weather: WEATHER[cycle.id]?.[r.date] ?? null,
     inPerson: num(r.early_in_person_daily),
     sites: {},
     returnedMail: num(r.mail_returned_daily),
