@@ -1,0 +1,51 @@
+{
+  "_comment": "Area-weighted centroid of each tracked jurisdiction's largest ring, from the Census county cartographic file (Virginia's independent cities are county-equivalents there). Sampled by scripts/fetch_weather.py. Generated \u2014 do not hand-edit.",
+  "source": "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_500k.zip",
+  "localities": {
+    "Alexandria City": {
+      "geoid": "51510",
+      "lat": 38.8185,
+      "lon": -77.0861
+    },
+    "Arlington County": {
+      "geoid": "51013",
+      "lat": 38.8786,
+      "lon": -77.1011
+    },
+    "Fairfax City": {
+      "geoid": "51600",
+      "lat": 38.853,
+      "lon": -77.2999
+    },
+    "Fairfax County": {
+      "geoid": "51059",
+      "lat": 38.8371,
+      "lon": -77.2773
+    },
+    "Falls Church City": {
+      "geoid": "51610",
+      "lat": 38.8847,
+      "lon": -77.1751
+    },
+    "Loudoun County": {
+      "geoid": "51107",
+      "lat": 39.0907,
+      "lon": -77.6357
+    },
+    "Manassas City": {
+      "geoid": "51683",
+      "lat": 38.7479,
+      "lon": -77.4838
+    },
+    "Manassas Park City": {
+      "geoid": "51685",
+      "lat": 38.7709,
+      "lon": -77.4429
+    },
+    "Prince William County": {
+      "geoid": "51153",
+      "lat": 38.7047,
+      "lon": -77.4807
+    }
+  }
+}
