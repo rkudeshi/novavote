@@ -166,11 +166,11 @@ appears in the same statewide file *and* publishes its own report, so the
 two can be compared directly. `checkLocalityMethod()` runs on every build
 and prints both series for every cycle that has both:
 
-- **In person is asserted** (0.5%). 2025: 137,215 vs the county's 137,221.
-  2023: 64,382 vs 64,382, exactly. Don't remove it — 24 locality datasets
-  rest on it.
-- **Mail is reported, not asserted.** 2025 is 0.83% apart, but 2023 is
-  **30% apart** — 47,771 against the county's 36,773 — and the divergence
+- **In person is asserted** (0.5%). 2025: 137,215 vs the county's
+  137,221. 2024: 239,315 vs 239,326. 2023: 64,382 vs 64,382, exactly.
+  Don't remove it — 24 locality datasets rest on it.
+- **Mail is reported, not asserted.** 2025 is 0.83% apart and 2024 is
+  0.03%, but 2023 is **30% apart** — 47,771 against the county's 36,773 — and the divergence
   is not obviously the daily file's fault. 36,773 returned on 70,465
   issued is a 52% return rate, against 73-84% in every other Fairfax
   cycle; the daily file would put 2023 at 68%, right in line. Something
@@ -294,11 +294,19 @@ wrong sheet. `DECOYS` in that script exists for this.
 
 ## Known data problems
 
-**2024 is a mid-cycle snapshot, not a final report.**
-The 2024 PDF's filename ("- 9.24") is literal: it stops 24 Sept 2024, five
-days into early voting, at 14,129 in-person ballots — a presidential cycle
-ends near 400k. It is flagged `coverage.complete: false` and shown as
-partial; the genuine end-of-cycle 2024 report is still open work.
+**2024 is complete, but has no per-site split.** The end-of-cycle report
+("- 11.07") parses and every county-level column lands exactly on the
+report's own printed totals: 239,326 in person, 114,183 issued by mail,
+69,977 returned by mail, 23,678 by drop box, 5,127 who voted in person
+instead. Seven **site** columns come up short — one page's text layer is
+scrambled (the parser flags an unparsed row label, `1T7o-Otaclt`, which
+is "17-Oct" and "Total" interleaved). `parse_report.py` therefore writes
+the verified county series and **withholds the split** rather than
+publishing figures that do not add up; the cycle carries
+`detail.sites: false` and its map, treemap, site grid and schedule are
+absent. Fixing the site parse would restore them. The old "- 9.24"
+five-day snapshot is still downloaded as `nov2024_snapshot.pdf` for
+reference and is deliberately never parsed.
 
 2023 *was* also a snapshot, from a PDF ending 23 Oct at 13,981 in-person
 ballots. The county's final xlsx has 64,382, so that cycle is now
@@ -306,10 +314,11 @@ complete. The 2023 PDF parse is deliberately absent from
 `extract-report.yml` — leaving it in would overwrite the final data with
 the snapshot on every run.
 
-**2020 has no registered-voter count.** Its report carries no Active
-Voters line, so the cycle sets `registeredVoters: null` and drops out of
-share-of-electorate views rather than borrowing a neighbouring year's
-denominator. Its Summary also disagrees with its own daily sheets by 42
+**2020's own report has no registered-voter count.** It carries no Active
+Voters line. The cycle still sets `registeredVoters: null`, but no longer
+drops out of share-of-electorate views: the state's own 2020 file
+supplies 751,830 via `data/registration.json`, which is that year's real
+count rather than a neighbouring year's borrowed. Its Summary also disagrees with its own daily sheets by 42
 (mail) and 125 (drop box) ballots the county never attributed to a
 congressional district; the daily series is authoritative here.
 
@@ -410,7 +419,11 @@ every push to `main`.
     precinct's numbers and looks entirely plausible (906 active voters for
     Fairfax County). The assertion against Fairfax's own reports is what
     caught it — keep it.
-  - **2023-2025 are still open.** The next candidate is the per-year
+  - **2020, 2021 and 2022 are done** and committed as
+    `data/registration.json` by the extract workflow. That gave Fairfax
+    2020 the denominator its own report never printed.
+  - **2023-2025 are still open**, which is the gap that matters: it is
+    every 2025 locality. The next candidate is the per-year
     registration-statistics pages on elections.virginia.gov, which carry
     monthly registrant counts by locality as xlsx.
   - A cycle's own `registeredVoters` wins over the fetched figure: it

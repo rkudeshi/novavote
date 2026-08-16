@@ -59,15 +59,24 @@ const CYCLES = [
     localityType: 'county',
     electionName: 'General Election (presidential)',
     electionDate: '2024-11-05',
-    reportDate: '2024-09-24',
-    status: 'Mid-cycle snapshot — not a final report',
+    reportDate: '2024-11-07',
+    status: 'Final (county-labeled unofficial)',
     coverage: {
-      complete: false,
+      complete: true,
+      /* Shown on the page. The per-site split is withheld rather than
+         published unverified: one page of this report's text layer is
+         scrambled and seven site columns come up short of their own
+         printed totals. Every county-level column reconciles exactly,
+         which is why the cycle ships at all. */
       note:
-        'This report is a snapshot taken 24 September 2024, five days into early voting. It is not the end-of-cycle report, so totals here are a small fraction of the eventual 2024 turnout.',
+        'Turnout by individual voting site is not available for this election; the countywide daily figures are.',
     },
     sourceUrl:
-      'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%209.24.pdf',
+      'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%2011.07.pdf',
+    expect: {
+      inPerson: 239326, returnedMail: 69977, returnedDropbox: 23678,
+      ballotsMailed: 114183, abInPerson: 5127,
+    },
   },
   {
     id: 'fairfax-2023-general',
@@ -141,9 +150,10 @@ const CYCLES = [
     electionDate: '2020-11-03',
     reportDate: '2020-11-03',
     status: 'Final (county-labeled unofficial)',
-    // 2020's report has no Active Voters line, so this cycle carries no
-    // registered-voter count and drops out of share-of-electorate views
-    // rather than borrowing a neighbouring year's denominator.
+    // 2020's own report has no Active Voters line. It no longer sits out
+    // the share-of-electorate views for that reason: the state's own 2020
+    // file supplies the figure (data/registration.json), which is that
+    // year's real count rather than a neighbouring year's borrowed.
     registeredVoters: null,
     coverage: { complete: true },
     sourceFile: 'data/sources/fairfax-2020-11-final-ab-daily-report.xlsx',
@@ -1081,7 +1091,7 @@ for (const ds of built) {
       `${String(ds.days.length).padStart(2)} days, ` +
       `${ds.totals.inPerson.toLocaleString().padStart(8)} in person, ` +
       `${vbm.toLocaleString().padStart(8)} by mail, ` +
-      `${ds.detail.sites ? 'report' : 'baseline'}, ` +
+      `${ds.detail.ballotsIssued ? 'report' : 'baseline'}, ` +
       `${ds.registeredVoters ? `${ds.registeredVoters.toLocaleString()} voters` : 'NO REGISTRATION'}, ` +
       `${ds.coverage.complete ? 'complete' : `PARTIAL through ${ds.coverage.dataThrough}`}`,
   );
