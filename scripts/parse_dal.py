@@ -29,11 +29,32 @@ from collections import defaultdict
 from pathlib import Path
 
 OUT = Path("data/parsed")
+SRC = Path("data/sources/dal")
 
-# Virginia's 2025 early-voting window, and Election Day.
-EARLY_FIRST = dt.date(2025, 9, 19)
-EARLY_LAST = dt.date(2025, 11, 1)
-ELECTION_DAY = dt.date(2025, 11, 4)
+# One entry per cycle. The window is not computed from "45 days before
+# Election Day": Virginia's rule lands a day or two off in practice, and
+# Fairfax's own report gives the real first and last day for every cycle
+# this project holds. Those are what is used.
+CYCLES = {
+    2025: {
+        "file": SRC / "2025" / "NoVA_2025_DAL_metrics_combined.csv",
+        "early_first": dt.date(2025, 9, 19),
+        "early_last": dt.date(2025, 11, 1),
+        "election": dt.date(2025, 11, 4),
+    },
+    2024: {
+        "file": SRC / "2024" / "NoVA_2024_DAL_metrics_combined.csv",
+        "early_first": dt.date(2024, 9, 20),
+        "early_last": dt.date(2024, 11, 2),
+        "election": dt.date(2024, 11, 5),
+    },
+    2023: {
+        "file": SRC / "2023" / "NoVA_2023_DAL_metrics_combined.csv",
+        "early_first": dt.date(2023, 9, 22),
+        "early_last": dt.date(2023, 11, 4),
+        "election": dt.date(2023, 11, 7),
+    },
+}
 
 # Rows are kept past the election and phase-tagged rather than truncated.
 #
@@ -45,24 +66,30 @@ ELECTION_DAY = dt.date(2025, 11, 4)
 # reads 51,567 on 1 November and climbs to 63,832 by 9 November, against
 # a published 64,367. Cutting the file at 1 November would therefore
 # under-report mail by a fifth while looking perfectly reasonable.
-def phase_of(d):
-    if d <= EARLY_LAST:
+def phase_of(d, cycle):
+    if d < cycle["early_first"]:
+        return "pre"
+    if d <= cycle["early_last"]:
         return "early"
-    if d <= ELECTION_DAY:
+    if d <= cycle["election"]:
         return "election"
     return "post"
 
+# Keyed by the upper-cased name, because the archives disagree on case
+# and on column name: 2025 writes "Fairfax County" under LOCALITY, the
+# 2023 and 2024 archives write "FAIRFAX COUNTY" under SOURCE_LOCALITY.
 LOCALITY_IDS = {
-    "Fairfax County": "fairfax",
-    "Loudoun County": "loudoun",
-    "Prince William County": "prince-william",
-    "Arlington County": "arlington",
-    "Alexandria City": "alexandria",
-    "Fairfax City": "fairfax-city",
-    "Falls Church City": "falls-church",
-    "Manassas City": "manassas",
-    "Manassas Park City": "manassas-park",
+    "FAIRFAX COUNTY": ("Fairfax County", "fairfax"),
+    "LOUDOUN COUNTY": ("Loudoun County", "loudoun"),
+    "PRINCE WILLIAM COUNTY": ("Prince William County", "prince-william"),
+    "ARLINGTON COUNTY": ("Arlington County", "arlington"),
+    "ALEXANDRIA CITY": ("Alexandria City", "alexandria"),
+    "FAIRFAX CITY": ("Fairfax City", "fairfax-city"),
+    "FALLS CHURCH CITY": ("Falls Church City", "falls-church"),
+    "MANASSAS CITY": ("Manassas City", "manassas"),
+    "MANASSAS PARK CITY": ("Manassas Park City", "manassas-park"),
 }
+LOCALITY_COLUMNS = ("LOCALITY", "SOURCE_LOCALITY")
 
 
 def parse_filedate(s):
@@ -81,9 +108,13 @@ def read_combined(path):
     by_loc = defaultdict(dict)
     with open(path, newline="", encoding="utf-8-sig") as fh:
         for row in csv.DictReader(fh):
-            loc = (row.get("LOCALITY") or "").strip()
-            # The per-locality files carry a types row ("string,number,…").
-            # The combined file drops it, but guard anyway.
+            loc = ""
+            for col in LOCALITY_COLUMNS:
+                if row.get(col):
+                    loc = row[col].strip().upper()
+                    break
+            # Some archives carry a types row ("string,number,…") under the
+            # header. Skipping it is not optional: int("number") throws.
             if not loc or row.get("FILEDATE", "").strip().lower() == "string":
                 continue
             try:
@@ -102,7 +133,7 @@ def read_combined(path):
     }
 
 
-def series(snaps):
+def series(snaps, cycle):
     """Snapshot pairs -> one row per activity date.
 
     A snapshot taken at 05:00 on day D reports the state through the end
@@ -133,6 +164,18 @@ def series(snaps):
     day = {}          # activity date -> [early delta, mail delta]
     spans = {}        # activity date -> days the covering snapshot spanned
     cum = {}          # activity date -> (on_machine, mail_in) as of that date
+
+    # The first snapshot is a baseline, not a delta — but it is not always
+    # zero. Fairfax's 2024 archive opens with one mail ballot already
+    # recorded, and ignoring it left the running total one short of the
+    # file's own final figure, which the assertion at the end caught. It
+    # is credited to the day that snapshot describes.
+    if snaps:
+        first_when, first_machine, first_mail = snaps[0]
+        if first_machine or first_mail:
+            base = first_when.date() - dt.timedelta(days=1)
+            day[base] = [first_machine, first_mail]
+        cum[first_when.date() - dt.timedelta(days=1)] = (first_machine, first_mail)
 
     for i in range(1, len(snaps)):
         when, on_machine, mail_in = snaps[i]
@@ -167,7 +210,7 @@ def series(snaps):
         run_mail += mail_d
         rows.append({
             "date": d.isoformat(),
-            "phase": phase_of(d),
+            "phase": phase_of(d, cycle),
             "early_in_person_daily": early_d,
             "early_in_person_cumulative": run_early,
             "mail_returned_daily": mail_d,
@@ -194,13 +237,14 @@ def series(snaps):
     return rows
 
 
-def write(loc, rows):
+def write(loc, year, rows):
     OUT.mkdir(parents=True, exist_ok=True)
-    slug = LOCALITY_IDS.get(loc)
-    if not slug:
+    known = LOCALITY_IDS.get(loc)
+    if not known:
         print(f"  [skip] {loc}: not a tracked jurisdiction")
         return None
-    path = OUT / f"{slug}-2025-general_dal_daily.csv"
+    _, slug = known
+    path = OUT / f"{slug}-{year}-general_dal_daily.csv"
     cols = ["date", "phase", "early_in_person_daily", "early_in_person_cumulative",
             "mail_returned_daily", "mail_returned_cumulative",
             "combined_daily", "combined_cumulative", "is_correction",
@@ -212,42 +256,63 @@ def write(loc, rows):
     return path
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("combined", help="NoVA_2025_DAL_metrics_combined.csv")
-    a = ap.parse_args()
+def run(year, cycle):
+    path = cycle["file"]
+    if not path.exists():
+        print(f"== {year}: no archive at {path} — skipping\n")
+        return
+    data = read_combined(path)
+    first = cycle["early_first"]
+    print(f"== {year} general (early voting {first} – {cycle['early_last']}, "
+          f"Election Day {cycle['election']})")
+    print(f"   read {len(data)} localities from {path}")
+    print(f"   {'locality':<24} {'early days':>10} {'in person':>10} "
+          f"{'mail at close':>13} {'mail final':>11}")
 
-    data = read_combined(a.combined)
-    print(f"read {len(data)} localities\n")
-
-    print(f"{'locality':<24} {'early days':>10} {'in person':>10} "
-          f"{'mail @11/1':>11} {'mail final':>11}")
     for loc in sorted(data):
-        all_rows = series(data[loc])
-        # The file opens a couple of days before early voting does. Those
-        # rows are dropped, but only after checking they are empty — if a
-        # ballot were recorded before the polls opened, silently trimming
-        # it would break the cumulative column for the whole cycle.
-        pre = [r for r in all_rows if r["date"] < EARLY_FIRST.isoformat()]
-        moved = [r for r in pre if r["combined_daily"] != 0]
-        if moved:
-            raise SystemExit(
-                f"{loc}: activity recorded before {EARLY_FIRST} "
-                f"({moved[0]['date']}: {moved[0]['combined_daily']}) — "
-                f"the early-voting window is wrong"
-            )
-        rows = [r for r in all_rows if r["date"] >= EARLY_FIRST.isoformat()]
-        if not rows:
-            print(f"  {loc}: no rows in the early-voting window")
+        all_rows = series(data[loc], cycle)
+        # Trim leading empty days only. The archives open days or weeks
+        # before in-person voting does, and a ballot really can be
+        # recorded in that window — Arlington has one on 16 September
+        # 2024, four days before the polls opened, which is what a UOCAVA
+        # ballot coming back early looks like. Cutting to a fixed window
+        # would drop it and break the cumulative column, so the window
+        # only tags the phase and the series starts wherever activity
+        # does. Days before the window are tagged "pre".
+        started = next((i for i, r in enumerate(all_rows)
+                        if r["combined_daily"] != 0), None)
+        if started is None:
+            print(f"   {loc}: no activity recorded")
             continue
+        rows = all_rows[started:]
+        pre = [r for r in rows if r["phase"] == "pre"]
+        if pre:
+            print(f"   [note] {LOCALITY_IDS.get(loc, (loc,))[0]}: "
+                  f"{sum(r['combined_daily'] for r in pre)} ballot(s) recorded "
+                  f"before {first}, kept and tagged pre")
         early = [r for r in rows if r["phase"] == "early"]
         last = rows[-1]
-        path = write(loc, rows)
-        if path:
-            print(f"{loc:<24} {len(early):>10} "
+        path_out = write(loc, year, rows)
+        if path_out:
+            name = LOCALITY_IDS[loc][0]
+            print(f"   {name:<24} {len(early):>10} "
                   f"{last['early_in_person_cumulative']:>10,} "
-                  f"{early[-1]['mail_returned_cumulative']:>11,} "
+                  f"{early[-1]['mail_returned_cumulative']:>13,} "
                   f"{last['mail_returned_cumulative']:>11,}")
+    print()
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("years", nargs="*", type=int,
+                    help="cycles to parse (default: all in CYCLES)")
+    a = ap.parse_args()
+
+    years = a.years or sorted(CYCLES, reverse=True)
+    for year in years:
+        if year not in CYCLES:
+            raise SystemExit(f"no archive registered for {year}")
+        run(year, CYCLES[year])
 
 
 if __name__ == "__main__":

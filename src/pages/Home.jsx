@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { DATASETS } from '../data/generated/index.js';
 import { JURISDICTIONS, NOV2025 } from '../data/jurisdictions.js';
 import { Link } from '../lib/router.jsx';
-import { fmt, longDate, pct, shortDate } from '../lib/format.js';
+import { fmt, longDate, parseDate, pct, shortDate } from '../lib/format.js';
 import { byRecency, methodTotals, summary } from '../lib/derive.js';
 import { useCountUp, useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
@@ -97,7 +97,7 @@ export default function Home() {
         </div>
       </section>
 
-      <CycleGrid scopes={scopes} />
+      <CycleGrid datasets={all} />
     </>
   );
 }
@@ -232,7 +232,7 @@ function KeyNumbers() {
   if (!rows.length) return null;
 
   const { turnout, turnoutVoters, turnoutCovers, reporting, inPersonShare } = NOV2025;
-  const peak = rows.reduce((a, j) => (!a || j.peak.value > a.peak.value ? j : a), null);
+  const peak = rows.reduce((a, j) => (!a || j.peak.share > a.peak.share ? j : a), null);
   const closing = rows.filter((j) => j.closing7 != null);
   const mail = rows.filter((j) => j.mailReturn != null);
 
@@ -276,10 +276,14 @@ function KeyNumbers() {
             />
           )}
           {peak && (
+            /* A share, not a count: the biggest single day in raw ballots
+               is Fairfax's every time and says only that Fairfax is
+               large. The share of a jurisdiction's own cycle that landed
+               on one day is a fact about how concentrated its vote was. */
             <Key
-              v={fmt(peak.peak.value)}
-              k="Busiest single day"
-              s={`${peak.name}, ${longDate(peak.peak.date)}`}
+              v={pct(peak.peak.share)}
+              k="Most concentrated day"
+              s={`of ${peak.name}\u2019s early vote, ${longDate(peak.peak.date)}`}
             />
           )}
           {ipShares.length > 1 && (
@@ -315,16 +319,19 @@ function Key({ v, k, s }) {
 /* ------------------------------------------------------------------
    Jurisdiction comparison — the lead of the page.
 
-   Two encodings, because the two questions are different: the bar is
-   raw volume (Fairfax dwarfs Falls Church), the share split is the mix
-   (a small city can lean far harder on mail than a big county). Every
-   jurisdiction carries both, so neither reading is privileged.
+   **The bar is a percentage, not a volume.** Fairfax casts more early
+   ballots than the other eight put together, so a bar scaled to raw
+   totals is a chart of how big Fairfax is — every other jurisdiction
+   collapses to a stub and nothing about how they voted is legible. The
+   full width is that jurisdiction's own early vote, split by how it was
+   cast, so every row is drawn to the same 100% and the rows can actually
+   be read against each other. The count stays, as a figure beside the
+   bar rather than as the thing being encoded.
 ------------------------------------------------------------------ */
 function Jurisdictions() {
   const [ref, inView] = useInView({ threshold: 0.1 });
   const rows = JURISDICTIONS.filter((j) => j.total != null);
   const pending = JURISDICTIONS.filter((j) => j.total == null);
-  const max = Math.max(...rows.map((j) => j.total), 1);
 
   return (
     <section className="section" ref={ref}>
@@ -333,11 +340,11 @@ function Jurisdictions() {
           Early voting by jurisdiction
         </h2>
         <p className="note" style={{ marginBottom: 20 }}>
-          November 2025 general election. Bar length is total early ballots;
-          the split shows how they were cast. The last column is early ballots
-          as a share of registered voters, which compares jurisdictions of
-          different sizes on equal footing — shown where a registration count
-          is recorded.
+          November 2025 general election. Each bar is that jurisdiction&rsquo;s
+          own early vote, split by how it was cast, so jurisdictions of very
+          different sizes compare directly. The last column is early ballots as
+          a share of registered voters, shown where a registration count is
+          recorded.
         </p>
 
         <div className="jur">
@@ -352,7 +359,7 @@ function Jurisdictions() {
                   <div
                     className="jur-bar"
                     style={{
-                      width: inView ? `${(j.total / max) * 100}%` : '0%',
+                      width: inView ? '100%' : '0%',
                       transitionDelay: `${i * 60}ms`,
                     }}
                   >
@@ -364,15 +371,15 @@ function Jurisdictions() {
                   </div>
                 </div>
                 <div className="jur-figs">
-                  <b>{fmt(j.total)}</b>
                   <span className="jur-split">
                     <i className="jur-dot" /> {pct(ipShare)} in person
                     <i className="jur-dot is-vbm" /> {pct(100 - ipShare)} by mail
                   </span>
+                  <b className="jur-count">{fmt(j.total)} ballots</b>
                 </div>
                 <div className="jur-turnout">
                   {j.turnout == null ? (
-                    <span className="muted">—</span>
+                    <span className="muted">&mdash;</span>
                   ) : (
                     <>
                       <b>{pct(j.turnout)}</b>
@@ -397,17 +404,24 @@ function Jurisdictions() {
   );
 }
 
-function CycleGrid({ scopes }) {
-  /* Cards are grouped by the same two scopes the chart offers, so a
-     reader who switched the chart to "by year" finds the same set below
-     it. A dataset in both groups is listed under the first — its own
-     jurisdiction's history is the more specific home for it. */
-  const seen = new Set();
-  const groups = [...scopes].reverse().map((sc) => {
-    const items = sc.datasets.filter((d) => !seen.has(d.id));
-    items.forEach((d) => seen.add(d.id));
-    return { ...sc, items };
-  }).filter((g) => g.items.length);
+/**
+ * Every dataset, grouped by the election it belongs to.
+ *
+ * Grouping followed the chart's two scopes when there were fourteen
+ * cards. With thirty it has to be the election: a reader looking for
+ * "Loudoun 2023" is looking under 2023, not under a comparison mode.
+ */
+function CycleGrid({ datasets }) {
+  const groups = [];
+  for (const ds of datasets) {
+    const key = ds.electionDate;
+    let g = groups.find((x) => x.key === key);
+    if (!g) groups.push((g = { key, label: electionLabel(ds), items: [] }));
+    g.items.push(ds);
+  }
+  // Largest first inside each election, which is the order the
+  // jurisdiction comparison above uses.
+  groups.forEach((g) => g.items.sort((a, b) => bigger(b) - bigger(a)));
 
   return (
     <section className="section">
@@ -417,12 +431,13 @@ function CycleGrid({ scopes }) {
         </h2>
         {groups.map((g, gi) => (
           <div key={g.key} style={{ marginTop: gi ? 40 : 0 }}>
-            {groups.length > 1 && (
-              <h3 className="grid-group">{g.groupLabel || g.label}</h3>
-            )}
+            <h3 className="grid-group">
+              {g.label} · {g.items.length}{' '}
+              {g.items.length === 1 ? 'jurisdiction' : 'jurisdictions'}
+            </h3>
             <div className="cycle-grid">
               {g.items.map((ds, i) => (
-                <CycleCard key={ds.id} ds={ds} delay={i * 70} />
+                <CycleCard key={ds.id} ds={ds} delay={i * 50} />
               ))}
             </div>
           </div>
@@ -431,6 +446,13 @@ function CycleGrid({ scopes }) {
     </section>
   );
 }
+
+const bigger = (ds) => methodTotals(ds).early;
+
+const electionLabel = (ds) =>
+  parseDate(ds.electionDate).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
 
 function CycleCard({ ds, delay }) {
   const [ref, inView] = useInView({ threshold: 0.2 });

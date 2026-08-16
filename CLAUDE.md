@@ -142,8 +142,10 @@ an in-progress 2026 cycle will use while daily pulls are running.
 
 ## Two levels of data, and why
 
-**Fairfax has an operational report; nobody else does.** Every other
-Northern Virginia locality is built from the state's daily absentee file,
+**For Fairfax, the county's own report is the authority.** The state's
+daily file also carries Fairfax; it is used to *check* and augment, never
+to replace a county figure. Every other Northern Virginia locality is
+built from that daily file,
 which carries two cumulative counts — early ballots cast in person, and
 mail ballots returned — and nothing else. That is the **locality baseline
 template**: `LOCALITY_CYCLES` + `buildLocalityCycle()` in `gen-data.mjs`,
@@ -161,10 +163,20 @@ correctly too.
 
 **The method is checkable, which is the only reason it ships.** Fairfax
 appears in the same statewide file *and* publishes its own report, so the
-two can be compared directly: in person 137,215 vs the county's 137,221
-(6 apart), mail 63,832 vs 64,367 (0.83%). `checkLocalityMethod()` asserts
-both on every build and fails if a future import drifts. Don't remove it —
-eight jurisdictions rest on it.
+two can be compared directly. `checkLocalityMethod()` runs on every build
+and prints both series for every cycle that has both:
+
+- **In person is asserted** (0.5%). 2025: 137,215 vs the county's 137,221.
+  2023: 64,382 vs 64,382, exactly. Don't remove it — 24 locality datasets
+  rest on it.
+- **Mail is reported, not asserted.** 2025 is 0.83% apart, but 2023 is
+  **30% apart** — 47,771 against the county's 36,773 — and the divergence
+  is not obviously the daily file's fault. 36,773 returned on 70,465
+  issued is a 52% return rate, against 73-84% in every other Fairfax
+  cycle; the daily file would put 2023 at 68%, right in line. Something
+  looks short in the 2023 workbook's own mail total. **Open question.**
+  Until it is run down the county's figure stands (per the rule above)
+  and the gap prints on every build.
 
 Two properties of that file are real, not artefacts, and both are handled
 in `parse_dal.py`:
@@ -359,9 +371,12 @@ every push to `main`.
 
 ## Not done yet / where to pick up
 - **Final 2023/2024 reports** — the two we have are partial (above).
-- **Past cycles for the eight non-Fairfax localities.** Nov 2025 is in
-  (see the locality baseline above); 2020–2024 are not. Same template —
-  land the snapshots, add entries to `LOCALITY_CYCLES`.
+- **Past cycles for the eight non-Fairfax localities.** Nov 2023, 2024
+  and 2025 are in (see the locality baseline above); 2020-2022 are not.
+  The publisher's archive doesn't currently expose them in this format.
+  Same template when it does — land the snapshots under
+  `data/sources/dal/<year>/`, add a year to `LOCALITY_ELECTIONS` and to
+  `CYCLES` in `parse_dal.py`.
   Naming convention is "<Name> City", never "City of <Name>".
   `src/data/jurisdictions.js` is the scope list; a jurisdiction with no
   reconciled dataset carries `total: null` and renders as "no figures
@@ -419,6 +434,16 @@ figure "really" means, no criticism of how a source presents its data, no
 references to source PDFs or upstream publishers in user-facing text.
 Provenance belongs in code comments and this file. A section blurb should
 say what the reader is looking at and what it is a share of, then stop.
+
+**Cross-jurisdiction comparisons are always percentages.** Fairfax casts
+more early ballots than the other eight jurisdictions put together, so
+anything scaled to raw totals is a chart of how big Fairfax is and every
+other row collapses to a stub. The home page's jurisdiction bars are each
+drawn to that jurisdiction's own 100%, split by how the vote was cast;
+the count sits beside the bar as context, never as the encoded quantity.
+The same rule killed a "busiest single day" figure, which Fairfax won by
+construction — it is now the most *concentrated* day, a share of that
+jurisdiction's own cycle.
 
 **Percentages follow magnitude.** `pct()` in `src/lib/format.js` prints
 no decimal at or above 10% and one below it — a tenth is noise on "68%"

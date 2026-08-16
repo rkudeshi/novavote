@@ -18,7 +18,14 @@ from pathlib import Path
 
 REPORTS = {
     "nov2025": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB-Daily-Report-Nov2025.pdf",
-    "nov2024": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%209.24.pdf",
+    # The end-of-cycle 2024 report. The county publishes several dated
+    # versions of the same report through a cycle; "- 11.07" is the one
+    # taken after Election Day. "nov2024_snapshot" below is the "- 9.24"
+    # file this project started from, which stops five days into early
+    # voting at 14,129 in-person ballots — it is kept for reference but
+    # must never overwrite the final data.
+    "nov2024": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%2011.07.pdf",
+    "nov2024_snapshot": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/PDF/AB%20Daily%20Report%20-%20NOV%202024%20-%209.24.pdf",
     "nov2023": "https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/ab%20daily%20report%20november%202023.pdf",
 }
 

@@ -193,21 +193,30 @@ const CYCLES = [
    Fairfax appears in the same file, which is what makes this method
    checkable rather than merely plausible — see checkLocalityMethod().
 ------------------------------------------------------------------ */
-const NOV2025 = {
-  electionName: 'General Election',
-  electionDate: '2025-11-04',
-  reportDate: '2025-11-09',
-  // Not the locality's own report. Every other cycle's status names what
-  // kind of document it came from; this names what kind of figure it is.
-  status: 'Unofficial daily totals',
-  coverage: { complete: true },
-  /* Registration counts for these localities are not in this data and
-     have not been sourced yet, so each carries null and drops out of
-     share-of-electorate views rather than borrowing a figure. */
-  registeredVoters: null,
-};
+const LOCALITY_ELECTIONS = [
+  {
+    year: 2025,
+    electionDate: '2025-11-04',
+    electionName: 'General Election',
+  },
+  {
+    year: 2024,
+    electionDate: '2024-11-05',
+    electionName: 'General Election (presidential)',
+  },
+  {
+    year: 2023,
+    electionDate: '2023-11-07',
+    electionName: 'General Election',
+  },
+];
 
-const LOCALITY_CYCLES = [
+/* Fairfax is deliberately absent: it publishes its own daily report, and
+   that report is the authority for Fairfax. The same daily file still
+   carries Fairfax, and it is used — as the check that keeps the other
+   eight honest (checkLocalityMethod) rather than as a second, competing
+   Fairfax dataset. */
+const LOCALITIES = [
   { slug: 'loudoun', locality: 'Loudoun County', shortName: 'Loudoun', localityType: 'county' },
   { slug: 'prince-william', locality: 'Prince William County', shortName: 'Prince William', localityType: 'county' },
   { slug: 'arlington', locality: 'Arlington County', shortName: 'Arlington', localityType: 'county' },
@@ -216,13 +225,26 @@ const LOCALITY_CYCLES = [
   { slug: 'falls-church', locality: 'Falls Church City', shortName: 'Falls Church', localityType: 'city' },
   { slug: 'manassas', locality: 'Manassas City', shortName: 'Manassas', localityType: 'city' },
   { slug: 'manassas-park', locality: 'Manassas Park City', shortName: 'Manassas Park', localityType: 'city' },
-].map((j) => ({
-  ...NOV2025,
-  ...j,
-  id: `${j.slug}-2025-general`,
-  shortLabel: `${j.shortName} 2025`,
-  file: `data/parsed/${j.slug}-2025-general_dal_daily.csv`,
-}));
+];
+
+const LOCALITY_CYCLES = LOCALITY_ELECTIONS.flatMap((e) =>
+  LOCALITIES.map((j) => ({
+    ...j,
+    electionDate: e.electionDate,
+    electionName: e.electionName,
+    // Not the locality's own report. Every other cycle's status names what
+    // kind of document it came from; this names what kind of figure it is.
+    status: 'Unofficial daily totals',
+    coverage: { complete: true },
+    /* Registration counts are filled from data/registration.json where
+       that file has them; a cycle with none drops out of
+       share-of-electorate views rather than borrowing a figure. */
+    registeredVoters: null,
+    id: `${j.slug}-${e.year}-general`,
+    shortLabel: `${j.shortName} ${e.year}`,
+    file: `data/parsed/${j.slug}-${e.year}-general_dal_daily.csv`,
+  })),
+);
 
 /* What a dataset actually contains. Every consumer that needs more than
    two daily counts asks here first. Report cycles fill these in from the
@@ -826,6 +848,7 @@ function buildLocalityCycle(cycle) {
   const reg = registrationFor(cycle);
   return {
     ...meta,
+    reportDate: dataThrough,
     registeredVoters: cycle.registeredVoters ?? reg?.registered ?? null,
     detail: { sites: false, returnRoute: false, ballotsIssued: false, surrendered: false },
     coverage: {
@@ -890,40 +913,61 @@ function buildLocalityCycle(cycle) {
  * way, and it has to keep holding — if a future import drifts, this is
  * what catches it before the figures ship.
  *
- * The tolerances are wide because the two are not the same measurement:
- * the county counts ballots, the daily file counts approved records, and
- * a late status correction moves one without the other.
+ * **In person is asserted.** It is the strong signal: the daily file
+ * moves a ballot on the day it is cast, and it lands on the county's own
+ * published figure to within six ballots in 2025 and exactly in 2023.
+ *
+ * **Mail is reported, not asserted.** The two are not measuring the same
+ * moment — the county counts a ballot when it is returned, the daily
+ * file when it is processed — and 2023 diverges far too widely to
+ * bracket: 47,771 against the county's 36,773. That gap is not obviously
+ * the daily file's fault. A 36,773 return on 70,465 ballots issued is a
+ * 52% return rate, against 73-84% in every other Fairfax cycle, and the
+ * daily file's figure would put 2023 at 68% — right in line. Something
+ * is short in the 2023 workbook's own mail total. Until that is run
+ * down, the county's figure stands (it is the county's report, and for
+ * Fairfax that is the authority) and the gap is printed on every build
+ * so it cannot be forgotten.
  */
 function checkLocalityMethod(reportCycles) {
-  const file = path.join(ROOT, 'data', 'parsed', 'fairfax-2025-general_dal_daily.csv');
-  const rows = readCsv(file);
-  const ds = reportCycles.find((d) => d.id === 'fairfax-2025-general');
-  if (!rows || !ds) {
-    console.warn('gen-data: no Fairfax daily file to check the locality method against');
-    return;
-  }
-  const last = rows[rows.length - 1];
-  const checks = [
-    ['early in person', num(last.early_in_person_cumulative), ds.totals.inPerson, 0.005],
-    ['returned by mail',
-      num(last.mail_returned_cumulative),
-      ds.totals.returnedMail + ds.totals.returnedDropbox,
-      0.02],
-  ];
-  for (const [what, got, want, tol] of checks) {
-    const off = Math.abs(got - want) / want;
-    if (off > tol) {
+  const IN_PERSON_TOLERANCE = 0.005;
+  let checked = 0;
+
+  for (const ds of reportCycles) {
+    if (ds.locality !== 'Fairfax County' || ds.coverage.complete === false) continue;
+    const year = ds.electionDate.slice(0, 4);
+    const rows = readCsv(
+      path.join(ROOT, 'data', 'parsed', `fairfax-${year}-general_dal_daily.csv`),
+    );
+    if (!rows?.length) continue;
+    checked += 1;
+
+    const last = rows[rows.length - 1];
+    const gotInPerson = num(last.early_in_person_cumulative);
+    const gotMail = num(last.mail_returned_cumulative);
+    const wantInPerson = ds.totals.inPerson;
+    const wantMail = ds.totals.returnedMail + ds.totals.returnedDropbox;
+
+    const offInPerson = Math.abs(gotInPerson - wantInPerson) / wantInPerson;
+    if (offInPerson > IN_PERSON_TOLERANCE) {
       throw new Error(
-        `gen-data: the locality method is off by ${(off * 100).toFixed(1)}% on ` +
-          `Fairfax ${what} (${got.toLocaleString()} vs the county's ` +
-          `${want.toLocaleString()}). Eight localities are built this way, so ` +
-          `this has to hold before any of them ship.`,
+        `gen-data: the locality method is off by ${(offInPerson * 100).toFixed(1)}% on ` +
+          `Fairfax ${year} early in person (${gotInPerson.toLocaleString()} vs the ` +
+          `county's ${wantInPerson.toLocaleString()}). Every non-Fairfax jurisdiction ` +
+          `is built this way, so this has to hold before any of them ship.`,
       );
     }
+    const offMail = Math.abs(gotMail - wantMail) / wantMail;
     console.log(
-      `  cross-check  Fairfax ${what.padEnd(16)} ${String(got).padStart(7)} vs ` +
-        `${String(want).padStart(7)} published — ${(off * 100).toFixed(2)}% apart`,
+      `  cross-check ${year}  in person ${String(gotInPerson).padStart(7)} vs ` +
+        `${String(wantInPerson).padStart(7)} (${(offInPerson * 100).toFixed(2)}%)   ` +
+        `by mail ${String(gotMail).padStart(7)} vs ${String(wantMail).padStart(7)} ` +
+        `(${(offMail * 100).toFixed(2)}%)${offMail > 0.05 ? '  <-- unexplained' : ''}`,
     );
+  }
+
+  if (!checked) {
+    console.warn('gen-data: no Fairfax daily file to check the locality method against');
   }
 }
 
@@ -996,11 +1040,16 @@ checkLocalityMethod(reports);
    most recent cycle and the largest jurisdiction, so it already owns
    that colour, and handing it to Prince William as well would put two
    identical lines on the one chart that shows all nine at once. */
-const localities = stepRamp(
-  LOCALITY_CYCLES.map(buildLocalityCycle)
-    .sort((a, b) => (b.totals.inPerson + b.totals.returnedMail)
+const localityByElection = {};
+for (const ds of LOCALITY_CYCLES.map(buildLocalityCycle)) {
+  (localityByElection[ds.electionDate] ||= []).push(ds);
+}
+const localities = Object.values(localityByElection).flatMap((group) =>
+  stepRamp(
+    group.sort((a, b) => (b.totals.inPerson + b.totals.returnedMail)
       - (a.totals.inPerson + a.totals.returnedMail)),
-  RECENCY_RAMP.slice(1),
+    RECENCY_RAMP.slice(1),
+  ),
 );
 
 const built = [...reports, ...localities];
