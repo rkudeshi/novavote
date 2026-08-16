@@ -49,19 +49,23 @@ const METHODS = [
   { key: 'returnedDropbox', label: 'Returned by drop box', color: 'var(--s3)', hex: '#1baf7a' },
 ];
 
-/* Metrics for "How the vote came in". Counts lead, because the first
-   question about a day is how many ballots it took. */
+/* Metrics for the historical comparison. The running total leads: this
+   section sits below the daily bars, which have already answered "how
+   many ballots did each day take?" for this cycle. What it adds is the
+   comparison, and the bank is the series that compares — it says
+   whether this cycle is ahead of the last one at every point, where a
+   daily figure only says whether one Tuesday beat another. */
 const SURGE_METRICS = [
-  {
-    key: 'value',
-    label: 'Ballots that day',
-    blurb: "Ballots recorded that day, all methods.",
-    counts: true,
-  },
   {
     key: 'cumulative',
     label: 'Banked to date',
     blurb: 'Ballots recorded by the end of that day, running total.',
+    counts: true,
+  },
+  {
+    key: 'value',
+    label: 'Ballots that day',
+    blurb: "Ballots recorded that day, all methods.",
     counts: true,
   },
   {
@@ -103,7 +107,7 @@ const monthYear = (date) =>
 
 export default function Election({ ds, all }) {
   const s = summary(ds);
-  const [surge, setSurge] = useState('value');
+  const [surge, setSurge] = useState('cumulative');
   const metric = SURGE_METRICS.find((m) => m.key === surge) || SURGE_METRICS[0];
   const { peers, kind } = peersOf(ds, all, metric.counts);
   /* Share of the electorate needs a denominator; a cycle without one is
@@ -216,11 +220,20 @@ export default function Election({ ds, all }) {
       </section>
       )}
 
+      <DailyVolume ds={ds} />
+
+      {/* Below the daily bars on purpose. Those describe this cycle;
+          this puts it beside the others, which is a question the reader
+          only has once they know the shape of the cycle in front of
+          them. */}
       <section className="section">
         <div className="wrap">
           <div className="sec-head">
             <div>
-              <h2 className="h2">How the vote came in</h2>
+              <div className="eyebrow">
+                {kind === 'years' ? 'Against past cycles' : 'Across jurisdictions'}
+              </div>
+              <h2 className="h2">Historical comparison</h2>
             </div>
             <div className="seg" role="tablist" aria-label="Measure">
               {SURGE_METRICS.map((m) => (
@@ -262,8 +275,6 @@ export default function Election({ ds, all }) {
           )}
         </div>
       </section>
-
-      <DailyVolume ds={ds} />
 
       {ds.sites.length > 1 && (
         <>

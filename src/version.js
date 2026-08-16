@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '7.0';
+export const VERSION = '7.1';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,18 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '7.0',
+    v: '7.1',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'The comparison, after the cycle',
+    notes: [
+      'The cross-cycle chart on an election page is now “Historical comparison”, and sits below the daily ballot bars rather than above them — those describe the cycle in front of you, and the comparison is the question you have once you have read them.',
+      'It opens on the running total instead of the daily figure. The bank is what says whether a cycle is ahead of the last one at every point; a daily figure only says whether one Tuesday beat another.',
+    ],
+  },
+  {
+    v: '7.0',
+    commit: 'c640ffe0df704b4fbe1fed7657b239eedadd3075',
     date: 'August 2026',
     headline: 'A page per jurisdiction, a page per election',
     notes: [

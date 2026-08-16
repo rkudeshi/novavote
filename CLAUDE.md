@@ -440,6 +440,12 @@ still deploys.
 To cut a release: bump `VERSION`, add an entry with the merge commit SHA,
 merge.
 
+**Every finished version goes to `main` without being asked.** The
+publisher has standing authorisation for this — a version that sits on a
+feature branch is a version nobody can see, since `deploy.yml` publishes
+on a push to `main` and nothing else. Push the work branch, push it to
+`main`, then confirm a deploy run exists for that SHA.
+
 ## Automation
 
 **Never write the CI-skip marker literally in a commit message** — the
