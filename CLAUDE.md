@@ -198,8 +198,18 @@ in `parse_dal.py`:
   fall mid-week, where placement really would be an assumption, so the
   flag stays.
 
-Negative daily deltas are preserved and flagged, never clamped: they are
-upstream status corrections, and zeroing them inflates the running total.
+**Negative daily figures are restatements, never clamped.** Zeroing one
+inflates the running total by its full amount. On 4 October 2023 all nine
+localities dip at once — Prince William by 5,137, Fairfax by 4,216 — and
+the next day's snapshot puts it all back. Left alone that reads as a
+collapse followed by the busiest day of the cycle; Loudoun 2023's
+"busiest day" was reporting 6,002 ballots that never happened then. So a
+negative day is merged with the day that restores it, exactly as a
+snapshot gap is merged, and both are flagged. The merge only commits if
+it clears within a day: a handful of unrestored -1s after Election Day
+would otherwise swallow a week of real post-election mail. Those stay
+negative and flagged. All four 2023 cycles now peak on the final
+Saturday, which is what they should do.
 
 The publisher asks that this series be labelled as derived rather than
 official. It carries `status: 'Unofficial daily totals'` — no source is

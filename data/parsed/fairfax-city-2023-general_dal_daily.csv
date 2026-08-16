@@ -11,8 +11,8 @@ date,phase,early_in_person_daily,early_in_person_cumulative,mail_returned_daily,
 2023-10-01,early,0,179,0,77,0,256,false,2
 2023-10-02,early,28,207,64,141,92,348,false,1
 2023-10-03,early,36,243,34,175,70,418,false,1
-2023-10-04,early,-157,86,-165,10,-322,96,true,1
-2023-10-05,early,214,300,225,235,439,535,false,1
+2023-10-04,early,57,300,60,235,117,535,true,2
+2023-10-05,early,0,300,0,235,0,535,true,2
 2023-10-06,early,25,325,20,255,45,580,false,1
 2023-10-07,early,0,325,0,255,0,580,false,1
 2023-10-08,early,0,325,0,255,0,580,false,1

@@ -1,9 +1,9 @@
 date,phase,early_in_person_daily,early_in_person_cumulative,mail_returned_daily,mail_returned_cumulative,combined_daily,combined_cumulative,is_correction,span_days
 2024-09-16,pre,1,1,0,0,1,1,false,1
 2024-09-17,pre,0,1,0,0,0,1,false,1
-2024-09-18,pre,-1,0,0,0,-1,0,true,1
-2024-09-19,pre,0,0,0,0,0,0,false,1
-2024-09-20,early,2048,2048,0,0,2048,2048,false,1
+2024-09-18,pre,2047,2048,0,0,2047,2048,true,3
+2024-09-19,pre,0,2048,0,0,0,2048,true,3
+2024-09-20,early,0,2048,0,0,0,2048,true,3
 2024-09-21,early,0,2048,0,0,0,2048,false,1
 2024-09-22,early,0,2048,0,0,0,2048,false,1
 2024-09-23,early,1107,3155,6,6,1113,3161,false,1

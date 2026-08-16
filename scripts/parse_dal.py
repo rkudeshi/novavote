@@ -200,30 +200,90 @@ def series(snaps, cycle):
     if not day:
         return []
 
-    rows = []
-    run_early = run_mail = 0
     first, last = min(day), max(max(day), max(cum))
+    dates = []
     d = first
     while d <= last:
-        early_d, mail_d = day.get(d, (0, 0))
+        dates.append(d)
+        d += dt.timedelta(days=1)
+    values = [list(day.get(x, (0, 0))) for x in dates]
+
+    """Fold a restatement into the days that undo it.
+
+    A negative daily figure means the snapshot under-reported, not that
+    ballots were withdrawn. On 4 October 2023 every one of the nine
+    localities dips at once — Prince William by 5,137, Fairfax by 4,216 —
+    and the 5 October snapshot puts it all back. Left alone that reads as
+    a collapse followed by the busiest day of the cycle, and "busiest
+    day" for Loudoun 2023 was reporting 6,002 ballots that never
+    happened on that date.
+
+    Clamping the negative to zero is the one thing that must not happen:
+    it would inflate the running total by the full amount. Instead the
+    negative day is merged with the days that restore it, exactly as a
+    snapshot gap is merged — the pair describes a real two-day total, the
+    split between them is unknowable, and the total lands on the span's
+    first day. The cumulative column is untouched by this, which is what
+    the assertion at the end of this function checks.
+    """
+    RESTORE_WINDOW = 2       # a real restatement is put back within a day
+    restated = set()
+    i = 0
+    while i < len(values):
+        early, mail = values[i]
+        if early >= 0 and mail >= 0:
+            i += 1
+            continue
+        # Look ahead only as far as a restatement plausibly reaches, and
+        # only commit the merge if it actually clears. A -1 that is never
+        # restored — an Election Day status correction, of which there
+        # are a handful — would otherwise swallow every remaining day and
+        # destroy a week of real post-election mail detail to chase one
+        # ballot. Those are left alone, negative and flagged.
+        run_e, run_m = early, mail
+        hit = None
+        for j in range(i + 1, min(i + 1 + RESTORE_WINDOW, len(values))):
+            run_e += values[j][0]
+            run_m += values[j][1]
+            if run_e >= 0 and run_m >= 0:
+                hit = j
+                break
+        if hit is None:
+            i += 1
+            continue
+        values[i] = [run_e, run_m]
+        for j in range(i + 1, hit + 1):
+            values[j] = [0, 0]
+        covered = hit - i + 1
+        for k in range(i, hit + 1):
+            spans[dates[k]] = max(spans.get(dates[k], 1), covered)
+            restated.add(dates[k])
+        i = hit + 1
+
+    # Any negative left is a small unrestored correction; it stays visible.
+    restated.update(x for x, v in zip(dates, values) if v[0] < 0 or v[1] < 0)
+
+    rows = []
+    run_early = run_mail = 0
+    for x, (early_d, mail_d) in zip(dates, values):
         run_early += early_d
         run_mail += mail_d
         rows.append({
-            "date": d.isoformat(),
-            "phase": phase_of(d, cycle),
+            "date": x.isoformat(),
+            "phase": phase_of(x, cycle),
             "early_in_person_daily": early_d,
             "early_in_person_cumulative": run_early,
             "mail_returned_daily": mail_d,
             "mail_returned_cumulative": run_mail,
             "combined_daily": early_d + mail_d,
             "combined_cumulative": run_early + run_mail,
-            # Flagged, not hidden: a negative delta is a correction and the
-            # reader should be able to see that it happened.
-            "is_correction": "true" if (early_d < 0 or mail_d < 0) else "false",
-            # 1 on a normal day; N on each day of an N-day snapshot gap.
-            "span_days": spans.get(d, 1),
+            # Flagged, not hidden: the reader should be able to see that a
+            # restatement happened here, and on which days it landed.
+            "is_correction": "true" if x in restated else "false",
+            # 1 on a normal day; N on each day of an N-day snapshot gap or
+            # restatement span.
+            "span_days": spans.get(x, 1),
         })
-        d += dt.timedelta(days=1)
 
     # The running totals are what the CSV publishes, so they have to land
     # exactly where the file's own last cumulative snapshot does. If they
