@@ -43,8 +43,13 @@ jobs:
         # Non-blocking: an address the geocoders can't resolve must not stop
         # the report parsing below. gen-data.mjs refuses to build a site with
         # no coordinate, so a miss still can't ship.
+        #
+        # `set +e` then an explicit echo: continue-on-error hides a crash
+        # entirely, and a malformed entry (missing city/state/zip) once made
+        # this step exit in under a second looking like a success.
         continue-on-error: true
-        run: python scripts/geocode_sites.py
+        run: |
+          python scripts/geocode_sites.py || echo "::warning::geocoder exited non-zero"
 
       - name: Fetch county boundary
         run: python scripts/fetch_boundary.py

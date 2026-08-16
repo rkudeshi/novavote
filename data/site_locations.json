@@ -207,15 +207,19 @@
     },
     {
       "key": "laurel_hill",
-      "label": "Laurel Hill",
-      "venue": "Laurel Hill Golf Club",
-      "address": "8701 Laurel Crest Dr, Lorton, VA 22079"
+      "name": "Laurel Hill Golf Club",
+      "address": "8701 Laurel Crest Dr",
+      "city": "Lorton",
+      "state": "VA",
+      "zip": "22079"
     },
     {
       "key": "gerry_hyland",
-      "label": "Gerry Hyland",
-      "venue": "Gerry Hyland Government Center",
-      "address": "8350 Richmond Hwy, Alexandria, VA 22309"
+      "name": "Gerry Hyland Government Center",
+      "address": "8350 Richmond Hwy",
+      "city": "Alexandria",
+      "state": "VA",
+      "zip": "22309"
     }
   ]
 }
