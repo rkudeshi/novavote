@@ -366,13 +366,31 @@ every push to `main`.
   `src/data/jurisdictions.js` is the scope list; a jurisdiction with no
   reconciled dataset carries `total: null` and renders as "no figures
   recorded yet" — **never** fill it with an estimate or a press figure.
-- **Registered-voter counts** for eight of nine 2025 localities, and for
-  Fairfax 2023/2024. This is the biggest single gap: share of electorate
-  is the measure that compares a county of 810,000 with a city of 10,000
-  on equal footing, and right now only Fairfax 2025 has a denominator, so
-  eight rows on the home page read "—". The right source is ELECT's
-  registration statistics, which the sandbox cannot reach — it needs a
-  CI-side fetch like the weather and boundary jobs.
+- **Registered-voter counts.** Share of electorate is the measure that
+  compares a county of 810,000 with a city of 10,000 on equal footing, and
+  most rows still have no denominator. Progress and dead ends so far:
+  - The state's **per-election turnout files**
+    (`apps.elections.virginia.gov/SBE_CSV/ELECTIONS/ELECTIONTURNOUT/`,
+    read by `scripts/fetch_turnout.py`) are **per precinct**, and summed
+    by locality their registration columns reconcile — Fairfax 742,649 in
+    2022 against the county's own 735,000, and 739,334 in 2021 against
+    730,300. That directory **stops after 2022**, so it supplies 2020
+    (including the figure Fairfax's own report never printed), 2021 and
+    2022, and nothing later.
+  - Its **turnout columns do not reconcile** and are deliberately unread:
+    summed by locality they put Fairfax 2020 at 1,020,701 ballots against
+    751,830 active voters, a 136% turnout against a real figure near
+    594,000. Do not resurrect them without working out what they count.
+  - Reading the **first matching row** instead of summing gives one
+    precinct's numbers and looks entirely plausible (906 active voters for
+    Fairfax County). The assertion against Fairfax's own reports is what
+    caught it — keep it.
+  - **2023-2025 are still open.** The next candidate is the per-year
+    registration-statistics pages on elections.virginia.gov, which carry
+    monthly registrant counts by locality as xlsx.
+  - A cycle's own `registeredVoters` wins over the fetched figure: it
+    comes from the locality's own report, and swapping it would silently
+    move a number already on the page.
 - **Real geocoding** for site coordinates.
 - **Precinct-level data**: the right upstream source is the Virginia Dept.
   of Elections (ELECT) — Daily Absentee List (DAL), Registered Voter List
