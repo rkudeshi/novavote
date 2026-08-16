@@ -333,8 +333,15 @@
 
 /* -------------------------- responsive -------------------------- */
 @media (max-width: 860px) {
-  .el-row { grid-template-columns: 48px 1fr; row-gap: 12px; }
-  .el-stat { text-align: left; }
+  /* Flex rather than a narrowed grid. Collapsing to `48px 1fr` left the
+     stats auto-placing into a 48px track, so a six-figure ballot count
+     overflowed its column and printed on top of the next one. Wrapping
+     puts the year and the name on the first line and the stats side by
+     side underneath, each with room for its own figure. */
+  .el-row { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 14px; }
+  .el-year { width: 42px; flex: none; }
+  .el-main { flex: 1 1 calc(100% - 58px); }
+  .el-stat { flex: 1 1 0; min-width: 84px; text-align: left; }
   .el-go { display: none; }
 }
 @media (max-width: 720px) {
@@ -900,3 +907,55 @@
   margin: 2px 0 6px; padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
+
+/* ---------------- breadcrumbs, chips, trend charts ---------------- */
+/* A cycle page sits at the intersection of two indexes — one place
+   across years, one election across places — so the crumb trail names
+   both rather than only pointing back up to the archive. */
+.crumbs {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--muted);
+}
+.crumbs a { color: var(--ink-2); text-decoration: none; }
+.crumbs a:hover { color: var(--ink); text-decoration: underline; }
+.crumbs span { color: var(--line-strong); }
+
+.jur-index { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 100px; padding: 6px 14px; font-size: 13px;
+  color: var(--ink-2); text-decoration: none;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.chip:hover { border-color: var(--line-strong); color: var(--ink); }
+.chip em {
+  font-style: normal; font-size: 10.5px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.chip.is-on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.chip.is-on em { color: rgba(255,255,255,.65); }
+
+.grid-group a { color: inherit; text-decoration: none; }
+.grid-group a:hover { color: var(--ink); text-decoration: underline; }
+
+/* Legend for the cumulative charts. Shape is the redundant channel that
+   survives greyscale and colour vision deficiency, so the swatch is the
+   line's own end marker rather than a generic square. */
+.trend { width: 100%; }
+.trend-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  padding: 10px 6px 2px; font-size: 12.5px;
+}
+.trend-key {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted); font-family: var(--font-mono); font-size: 11.5px;
+}
+.trend-key.is-on { color: var(--ink); font-weight: 600; }
+.trend-key em {
+  font-style: normal; font-family: var(--font-body); font-size: 10.5px;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+}
+
+.dotplot { width: 100%; }

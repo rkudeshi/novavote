@@ -54,6 +54,35 @@ export function timeline(ds) {
     .filter((r) => r.value > 0);
 }
 
+/**
+ * Running totals per voting method, one row per day in the record.
+ *
+ * Unlike `timeline`, quiet days are **kept**. A cumulative curve should
+ * sit flat across a closed Sunday; dropping the row makes the line
+ * interpolate across it and invents a gentle slope where nothing
+ * happened. The cost is a longer array, which no consumer cares about.
+ *
+ * `vbm` is the whole vote-by-mail group — mail and drop box together —
+ * because that is the grouping the site presents everywhere. A dataset
+ * with no route split still has a real group total; see methodTotals.
+ */
+export function cumulativeByMethod(ds) {
+  let inPerson = 0;
+  let vbm = 0;
+  return ds.days.map((d) => {
+    inPerson += d.inPerson || 0;
+    vbm += (d.returnedMail || 0) + (d.returnedDropbox || 0);
+    return {
+      date: d.date,
+      daysOut: daysUntil(d.date, ds.electionDate),
+      weekend: isWeekend(d.date),
+      inPerson,
+      vbm,
+      early: inPerson + vbm,
+    };
+  });
+}
+
 /** The single busiest early-voting day of a cycle. */
 export function peakDay(ds) {
   return timeline(ds).reduce((a, b) => (b.value > a.value ? b : a));

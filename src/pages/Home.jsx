@@ -4,6 +4,7 @@ import { JURISDICTIONS, NOV2025 } from '../data/jurisdictions.js';
 import { Link } from '../lib/router.jsx';
 import { fmt, longDate, parseDate, pct, shortDate } from '../lib/format.js';
 import { byRecency, methodTotals, summary } from '../lib/derive.js';
+import { cyclePath, electionPath, jurisdictionPath } from '../lib/slugs.js';
 import { useCountUp, useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
 
@@ -332,6 +333,7 @@ function Jurisdictions() {
   const [ref, inView] = useInView({ threshold: 0.1 });
   const rows = JURISDICTIONS.filter((j) => j.total != null);
   const pending = JURISDICTIONS.filter((j) => j.total == null);
+  const latest = byRecency(DATASETS)[0]?.electionDate;
 
   return (
     <section className="section" ref={ref}>
@@ -399,6 +401,21 @@ function Jurisdictions() {
             recorded yet.
           </p>
         )}
+
+        {/* Two ways out of this table: sideways to the rest of this
+            election, or down into one jurisdiction's whole history. */}
+        <div className="jur-index" style={{ marginTop: 24 }}>
+          {latest && (
+            <Link to={electionPath(latest)} className="chip is-on">
+              Every jurisdiction, side by side →
+            </Link>
+          )}
+          {rows.map((j) => (
+            <Link key={j.key} to={j.home} className="chip">
+              {j.name}<em>over time</em>
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -432,8 +449,10 @@ function CycleGrid({ datasets }) {
         {groups.map((g, gi) => (
           <div key={g.key} style={{ marginTop: gi ? 40 : 0 }}>
             <h3 className="grid-group">
-              {g.label} · {g.items.length}{' '}
-              {g.items.length === 1 ? 'jurisdiction' : 'jurisdictions'}
+              <Link to={electionPath(g.key)}>
+                {g.label} · {g.items.length}{' '}
+                {g.items.length === 1 ? 'jurisdiction' : 'jurisdictions'} →
+              </Link>
             </h3>
             <div className="cycle-grid">
               {g.items.map((ds, i) => (
@@ -460,7 +479,7 @@ function CycleCard({ ds, delay }) {
   const m = methodTotals(ds);
   return (
     <Link
-      to={`/e/${ds.id}`}
+      to={cyclePath(ds)}
       className={`card cycle ${inView ? 'is-in' : ''}`}
       ref={ref}
       style={{ transitionDelay: `${delay}ms` }}

@@ -6,6 +6,7 @@ import {
 import { Link } from '../lib/router.jsx';
 import { fmt, fullDate, longDate, pct, shortDate } from '../lib/format.js';
 import { summary, timeline } from '../lib/derive.js';
+import { electionPath, jurisdictionPath } from '../lib/slugs.js';
 import { useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
 import SiteRhythm from '../components/charts/SiteRhythm.jsx';
@@ -95,6 +96,11 @@ function peersOf(ds, all, counts) {
   return { peers: sameDay, kind: 'places' };
 }
 
+const monthYear = (date) =>
+  new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'long', year: 'numeric',
+  });
+
 export default function Election({ ds, all }) {
   const s = summary(ds);
   const [surge, setSurge] = useState('value');
@@ -112,7 +118,15 @@ export default function Election({ ds, all }) {
     <>
       <section className="section el-head">
         <div className="wrap">
-          <Link to="/elections" className="back">← All elections</Link>
+          {/* Both axes out of a single cycle: the same place in other
+              years, and the same election in other places. */}
+          <nav className="crumbs" aria-label="Breadcrumb">
+            <Link to="/elections">All elections</Link>
+            <span aria-hidden="true">/</span>
+            <Link to={jurisdictionPath(ds.locality)}>{ds.locality}</Link>
+            <span aria-hidden="true">/</span>
+            <Link to={electionPath(ds.electionDate)}>{monthYear(ds.electionDate)}</Link>
+          </nav>
           <div className="eyebrow" style={{ marginTop: 16 }}>
             {ds.electionName} · {fullDate(ds.electionDate)} · {ds.status}
           </div>

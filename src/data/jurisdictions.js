@@ -14,9 +14,10 @@
 ------------------------------------------------------------------ */
 import { DATASETS } from './generated/index.js';
 import { closingShare, methodTotals, peakDay } from '../lib/derive.js';
+import { cyclePath, jurisdictionPath } from '../lib/slugs.js';
 
 const EMPTY = {
-  total: null, inPerson: null, vbm: null, href: null,
+  total: null, inPerson: null, vbm: null, href: null, home: null,
   registered: null, turnout: null, sites: null, peak: null,
   closing7: null, mailReturn: null,
 };
@@ -31,7 +32,10 @@ function fromDataset(id) {
     total: m.early,
     inPerson: m.inPerson,
     vbm: m.vbm,
-    href: `/e/${ds.id}`,
+    href: cyclePath(ds),
+    /* The jurisdiction's own page, which spans every cycle it has —
+       distinct from the link above, which is this one election. */
+    home: jurisdictionPath(ds.locality),
     registered: reg,
     /* Early ballots over registration. Not turnout — Election Day is not
        in these files — but it is the one measure that compares a county

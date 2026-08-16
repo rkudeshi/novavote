@@ -47,17 +47,39 @@ against its own published grand total individually. There are 16 sites, not 17.
 **Frontend — v2 (`src/`)**. Vite + React, light theme, real routes.
 
 ```
-/                     cross-cycle overview + comparison
-/elections            index of every locality-election
-/e/<cycle-id>         per-election detail (charts, map, table)
-/versions             version archive (linked from the footer only)
-/versions/v4          archived build; a bare major drops its ".0"
+/                          cross-cycle overview + comparison
+/elections                 index of every locality-election
+/fairfax-county            one jurisdiction, every election it has
+/2025-november             one election, every jurisdiction in it
+/fairfax-county/2025-11    per-election detail (charts, map, table)
+/e/<cycle-id>              legacy — redirects to the canonical path above
+/versions                  version archive (linked from the footer only)
+/versions/v4               archived build; a bare major drops its ".0"
 ```
 
 Routing is a ~60-line path router (`src/lib/router.jsx`). GitHub Pages has
 no rewrite rules, so `vite.config.js` copies `index.html` to `404.html` at
 build time — Pages serves that for any deep path and the app boots and
 reads `location.pathname`. Don't switch to hash routing without a reason.
+
+**Slugs are derived, never stored** (`src/lib/slugs.js`). The dataset id
+(`fairfax-2025-general`) stays the internal key — it names the generated
+file and is what `gen-data.mjs` asserts against — but it is not what a URL
+should say. `jurisdictionPath`, `electionPath` and `cyclePath` compute the
+address from the dataset, so a new locality or cycle addresses itself with
+no table to update. Two single-segment shapes share the same slot, so
+`matchPath` tells them apart by pattern (`\d{4}-[a-z]+` is an election,
+anything else is a place) rather than by lookup order. `/e/<id>` is
+redirected with `replace`, not rendered — two live URLs for one cycle is
+how half a site's internal links end up pointing at the old one.
+
+`electionKind()` lives there too, and is load-bearing rather than
+decorative: Virginia runs a four-year rotation, so `year % 4` sorts a
+cycle into presidential / midterm / statewide / General Assembly exactly.
+It is what makes "the comparable prior election" a fact — 2025 belongs
+beside 2021, and drawing it beside 2024 as a peer is the single most
+misleading thing a multi-year turnout chart can do, since a presidential
+cycle roughly doubles the early vote here.
 
 **Deploy path**: the site is served at the root of its own subdomain,
 `novavote.raviudeshi.com`, so `base` in `vite.config.js` is `/` and
@@ -116,6 +138,31 @@ curve and the grid mostly encoded the calendar. Its replacements:
   is fixed across all days, never per frame, or the surge would vanish.
   A site that has not opened is a dashed hollow ring, never a zero-radius
   circle: "not open" and "nobody came" must not look the same.
+- `TrendLines` — the *cumulative* counterpart to SurgeChart, and the lead
+  of both the jurisdiction and the election page. Where the surge draws
+  the daily rhythm, this draws the bank: how many ballots were in hand
+  with n days to go, which is what answers "are we ahead of last time?"
+  at every point rather than only at the end. Telling the lines apart is
+  the whole design problem, and three **redundant** channels do it: two
+  curves in colour and the rest grey; a distinct end-marker shape per
+  series, repeated in the legend (shape survives greyscale and every
+  form of CVD); and the series name as a direct label at its end point.
+  Channels 2 and 3 hold to six series. Past that — nine jurisdictions in
+  one election — there are more curves than shapes and the end labels
+  stack into an unreadable column, so **only the emphasised pair is
+  named** and the legend says "+N more" rather than promising an
+  identification the chart cannot deliver. The election page supplies a
+  focus control instead, so any jurisdiction is one click from being the
+  emphasised line. Emphasis is passed in, never decided in the
+  component: which cycle is comparable is a calendar fact and lives in
+  `electionKind()`.
+- `DotPlot` — one row per year (jurisdiction page) or per jurisdiction
+  (election page), a dot per method on one shared **percentage** axis.
+  Three bars per row makes the eye compare lengths inside a row; dots on
+  a common axis make the column the comparison, which is the one that
+  matters. The axis is always a percentage — these rows are places and
+  years of very different size, and a count axis would make every row a
+  statement about population.
 
 **Typography**: Fraunces (soft serif) for headings, Source Sans 3
 (humanist) for body, IBM Plex Mono reserved for genuinely tabular figures.
@@ -530,6 +577,25 @@ flex row's min-content width is the *sum* of its items' min-content
 widths, so a labelled bar reports ~400px on a phone and a default `auto`
 track grows to fit it — dragging the whole card past the viewport. This
 is what caused the mobile overflow; don't revert `.rs` to a bare `grid`.
+
+**A grid that narrows its tracks must narrow its items too.** `.el-row`
+collapsed from six columns to `48px 1fr` on a phone, and the three stat
+cells then auto-placed into that 48px track — so a six-figure ballot
+count printed on top of the next column. It is a wrapping flex row at
+that width now: year and name on the first line, stats side by side
+underneath, each sized to its own figure.
+
+**Counts compare a place with itself; percentages compare places.** This
+is why the jurisdiction page offers a ballots axis and the election page
+does not. Within one jurisdiction a raw count across years is a fair
+fight — 2024's presidential surge against two off years is the point.
+Across jurisdictions it is not, and the same rule governs every
+aggregate: the region's reference line is **summed before it is
+divided**, never averaged from nine percentages, which would weight
+Falls Church equally with Fairfax and describe no real electorate. When
+ballots and voters are divided, both must come from the same set of
+places — nine jurisdictions' ballots over eight jurisdictions'
+electorate is a percentage of nothing.
 
 **Motion is decoration on a page that reads without it.** Everything
 animated degrades to its final state under `prefers-reduced-motion`, and

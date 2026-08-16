@@ -30,9 +30,14 @@ export function RouterProvider({ children }) {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const navigate = useCallback((to) => {
+  /* `replace` is for redirects — the legacy /e/<id> addresses resolve to
+     a canonical path, and pushing that would leave the old URL in the
+     history so Back bounces straight off the redirect again. */
+  const navigate = useCallback((to, { replace = false } = {}) => {
     if (to === currentPath()) return;
-    window.history.pushState({}, '', `${BASE}${to === '/' ? '/' : to}`);
+    const url = `${BASE}${to === '/' ? '/' : to}`;
+    if (replace) window.history.replaceState({}, '', url);
+    else window.history.pushState({}, '', url);
     setPath(to);
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
   }, []);

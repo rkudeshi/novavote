@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '6.1';
+export const VERSION = '7.0';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,23 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '6.1',
+    v: '7.0',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'A page per jurisdiction, a page per election',
+    notes: [
+      'Every jurisdiction now has its own page at an address that reads like one — /fairfax-county — gathering every election it has daily data for.',
+      'Every election has a page covering all nine jurisdictions at once, at /2025-november.',
+      'A single locality-election moves to /fairfax-county/2025-11. The old /e/ addresses redirect there.',
+      'New cumulative charts: how many ballots were banked with n days to go, in person and by mail, as counts, as a share of the early vote, and as a share of the electorate.',
+      'The current cycle and the last comparable one are drawn in colour and the rest in grey — comparable meaning the same point in Virginia’s four-year rotation, so a governor’s year is read against the last governor’s year and not against a presidential one.',
+      'Early voting against the electorate is now a dot plot: one row per year on a jurisdiction page, one row per jurisdiction on an election page, always on a shared percentage axis.',
+      'On a phone, an election row no longer prints its ballot count on top of the next column.',
+    ],
+  },
+  {
+    v: '6.1',
+    commit: '519247805254124a95a2e64b1fac37c20beabef4',
     date: 'August 2026',
     headline: 'Counts first, and weather everywhere',
     notes: [
