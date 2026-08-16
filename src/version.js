@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '6.0';
+export const VERSION = '6.1';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,21 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '6.0',
+    v: '6.1',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Counts first, and weather everywhere',
+    notes: [
+      '\u201cHow the vote came in\u201d gains a measure switcher and now opens on ballots rather than percentages: ballots that day, banked to date, daily share, share of electorate.',
+      'Counts compare a jurisdiction with its own other cycles, shares compare jurisdictions with each other \u2014 raw ballots across jurisdictions would only show how big Fairfax is.',
+      'Daily weather covers every jurisdiction and every election, sampled at each one\u2019s own centroid. On 21 September 2025 that ranged from a tenth of an inch in Fairfax to half an inch in Falls Church City.',
+      'Hovering a day in \u201cBallots by day\u201d now names the day of the week and that day\u2019s weather.',
+      'Chart axes print thousands separators.',
+    ],
+  },
+  {
+    v: '6.0',
+    commit: '152b90ee07d17ab56be70297aee80496c08373a8',
     date: 'August 2026',
     headline: 'All of Northern Virginia',
     notes: [
