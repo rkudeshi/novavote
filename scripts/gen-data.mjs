@@ -74,17 +74,81 @@ const CYCLES = [
     locality: 'Fairfax County',
     shortLabel: 'Fairfax 2023',
     localityType: 'county',
-    electionName: 'General Election',
+    electionName: 'General & Special Elections',
     electionDate: '2023-11-07',
-    reportDate: '2023-10-23',
-    status: 'Mid-cycle snapshot — not a final report',
-    coverage: {
-      complete: false,
-      note:
-        'This report is a snapshot taken 23 October 2023, two weeks before Election Day and before any satellite site opened. It is not the end-of-cycle report.',
+    reportDate: '2023-11-04',
+    status: 'Final (county-labeled unofficial)',
+    registeredVoters: 717440,
+    coverage: { complete: true },
+    sourceFile: 'data/sources/fairfax-2023-11-final-ab-daily-report.xlsx',
+    expect: {
+      inPerson: 64382, returnedMail: 30240, returnedDropbox: 6533,
+      ballotsMailed: 70465, abInPerson: 850,
     },
-    sourceUrl:
-      'https://www.fairfaxcounty.gov/elections/sites/elections/files/Assets/Documents/ab%20daily%20report%20november%202023.pdf',
+  },
+  {
+    id: 'fairfax-2022-general',
+    dir: 'data/parsed',
+    prefix: 'fairfax-2022-general_',
+    locality: 'Fairfax County',
+    shortLabel: 'Fairfax 2022',
+    localityType: 'county',
+    electionName: 'General Election',
+    electionDate: '2022-11-08',
+    reportDate: '2022-11-08',
+    status: 'Final (county-labeled unofficial)',
+    registeredVoters: 735000,
+    coverage: { complete: true },
+    sourceFile: 'data/sources/fairfax-2022-11-final-ab-daily-report.xlsx',
+    expect: {
+      inPerson: 82168, returnedMail: 45840, returnedDropbox: 12346,
+      ballotsMailed: 76338,
+    },
+  },
+  {
+    id: 'fairfax-2021-general',
+    dir: 'data/parsed',
+    prefix: 'fairfax-2021-general_',
+    locality: 'Fairfax County',
+    shortLabel: 'Fairfax 2021',
+    localityType: 'county',
+    electionName: 'General Election (governor)',
+    electionDate: '2021-11-02',
+    reportDate: '2021-11-05',
+    status: 'Final (county-labeled unofficial)',
+    registeredVoters: 730300,
+    coverage: { complete: true },
+    sourceFile: 'data/sources/fairfax-2021-11-final-ab-daily-report.xlsx',
+    expect: {
+      inPerson: 109764, returnedMail: 48058, returnedDropbox: 19217,
+      ballotsMailed: 82239,
+    },
+  },
+  {
+    id: 'fairfax-2020-general',
+    dir: 'data/parsed',
+    prefix: 'fairfax-2020-general_',
+    locality: 'Fairfax County',
+    shortLabel: 'Fairfax 2020',
+    localityType: 'county',
+    electionName: 'General Election (presidential)',
+    electionDate: '2020-11-03',
+    reportDate: '2020-11-03',
+    status: 'Final (county-labeled unofficial)',
+    // 2020's report has no Active Voters line, so this cycle carries no
+    // registered-voter count and drops out of share-of-electorate views
+    // rather than borrowing a neighbouring year's denominator.
+    registeredVoters: null,
+    coverage: { complete: true },
+    sourceFile: 'data/sources/fairfax-2020-11-final-ab-daily-report.xlsx',
+    // Mail and drop-box totals are the daily sheets' own; 2020's Summary
+    // breaks returns down by congressional district and its columns fall
+    // 42 and 125 short of them, being ballots the county never attributed
+    // to a district. See scripts/parse_xlsx_report.py.
+    expect: {
+      inPerson: 193596, returnedMail: 141051, returnedDropbox: 85292,
+      ballotsMailed: 268982,
+    },
   },
 ];
 
@@ -107,6 +171,8 @@ const SITE_LABELS = {
   herndon_fortnightly: 'Herndon Fortnightly',
   jim_scott: 'Jim Scott',
   lorton: 'Lorton',
+  laurel_hill: 'Laurel Hill',
+  gerry_hyland: 'Gerry Hyland',
   mason: 'Mason',
   mclean: 'McLean',
   providence: 'Providence',

@@ -204,6 +204,18 @@
       "lon": -77.237626,
       "matchedAddress": "6140 ROLLING RD, SPRINGFIELD, VA, 22152",
       "geocodeSource": "census"
+    },
+    {
+      "key": "laurel_hill",
+      "label": "Laurel Hill",
+      "venue": "Laurel Hill Golf Club",
+      "address": "8701 Laurel Crest Dr, Lorton, VA 22079"
+    },
+    {
+      "key": "gerry_hyland",
+      "label": "Gerry Hyland",
+      "venue": "Gerry Hyland Government Center",
+      "address": "8350 Richmond Hwy, Alexandria, VA 22309"
     }
   ]
 }

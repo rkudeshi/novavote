@@ -61,10 +61,18 @@ jobs:
       - name: Download and dump text layer
         run: python scripts/extract_pdf.py
 
+      - name: Parse final reports (xlsx)
+        run: |
+          pip install --quiet openpyxl
+          python scripts/parse_xlsx_report.py --all
+
       - name: Parse into CSVs
         run: |
-          python scripts/parse_report.py pdf-extract/nov2023.pdf \
-            --year 2023 --cycle fairfax-2023-general
+          # NOTE: no 2023 here. The county's *final* 2023 report is an
+          # xlsx parsed above; the PDF this repo started from is a
+          # mid-cycle snapshot ending 23 Oct. Re-parsing it into
+          # fairfax-2023-general would overwrite the final data with the
+          # snapshot on every run.
           python scripts/parse_report.py pdf-extract/nov2024.pdf \
             --year 2024 --cycle fairfax-2024-general
           # 2025 is the control: we already have hand-validated CSVs for it,
