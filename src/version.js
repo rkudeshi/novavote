@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '5.4';
+export const VERSION = '6.0';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,21 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '5.4',
+    v: '6.0',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'All of Northern Virginia',
+    notes: [
+      'Eight more jurisdictions join Fairfax for November 2025: Loudoun, Prince William, Arlington, Alexandria City, Fairfax City, Falls Church City, Manassas City and Manassas Park City.',
+      'Each has its own page with daily in-person and by-mail curves; what those figures cannot show \u2014 individual voting sites, the drop-box split, ballots issued \u2014 is left out rather than shown as zero.',
+      'The home page comparison switches between nine jurisdictions in one election and Fairfax across six years.',
+      'The full data table is now tabbed, one tab per table in the source report, with sub-columns hidden until asked for and column totals pinned to the bottom.',
+      '\u201cCast in the final week\u201d no longer counts mail processed after Election Day.',
+    ],
+  },
+  {
+    v: '5.4',
+    commit: 'bab8c6c4388ba3fb931f240e7a0a1a02db8a2285',
     date: 'August 2026',
     headline: 'Voting hours, published and divided by',
     notes: [

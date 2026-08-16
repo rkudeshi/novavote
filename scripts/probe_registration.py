@@ -46,21 +46,24 @@ LOCALITIES = [
 # own CSV directory, linked from the registration/turnout landing page —
 # a machine-readable index, which is exactly what is wanted. Round 2
 # walks it.
+# Round 2 settled the turnout directory: it carries per-precinct files
+# whose registration columns reconcile against Fairfax's own reports, but
+# it stops after 2022 — nothing in the index mentions 2024 or 2025 at
+# all, and 2023 has only special elections. Round 3 goes after the years
+# that directory cannot supply, which are the ones that matter most: the
+# per-year registration-statistics pages, which carry monthly registrant
+# counts by locality.
 CANDIDATES = [
-    "https://apps.elections.virginia.gov/SBE_CSV/",
-    "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/",
-    "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/ELECTIONTURNOUT/",
-    "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/REGISTRATIONSTATISTICS/",
-    "https://apps.elections.virginia.gov/SBE_CSV/REGISTRANT/",
-    "https://www.elections.virginia.gov/resultsreports/registration-statistics/",
+    "https://www.elections.virginia.gov/resultsreports/registration-statistics/2025-registration-statistics/",
+    "https://www.elections.virginia.gov/resultsreports/registration-statistics/2024-registration-statistics/",
+    "https://www.elections.virginia.gov/resultsreports/registration-statistics/2023-registration-statistics/",
+    "https://www.elections.virginia.gov/resultsreports/registration-statistics/historical-registration-statistics/",
 ]
 
 # Links worth following out of a landing page.
-INTERESTING = re.compile(
-    r"(\.csv|\.xlsx?|\.zip|\.json|registrant|registration|registered|turnout"
-    r"|/SBE_CSV|/ELECTIONS?/|20(2[0-9])/?$)",
-    re.I,
-)
+# On the year pages the useful links are the data files themselves, so
+# navigation links are excluded rather than merely ranked below them.
+INTERESTING = re.compile(r"(\.csv|\.xlsx?|\.zip)$", re.I)
 
 
 def get(url):
