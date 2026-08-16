@@ -81,9 +81,20 @@ jobs:
         run: python scripts/find_reports.py
 
       - name: Download and dump text layer
-        run: python scripts/extract_pdf.py
+        # Non-blocking. The county's server is the flakiest dependency in
+        # this job, and a refused download for one report used to fail
+        # the whole run — which skipped the commit step and threw away
+        # every other step's output, including four minutes of weather
+        # that had just been fetched successfully. A missing PDF means
+        # its parse is skipped below; the CSVs already in the repo stand.
+        continue-on-error: true
+        run: |
+          python scripts/extract_pdf.py \
+            || echo "::warning::one or more report PDFs did not download"
 
       - name: Parse final reports (xlsx)
+        # The workbooks are committed to data/sources/, so this one does
+        # not depend on the county's server being up.
         run: |
           pip install --quiet openpyxl
           python scripts/parse_xlsx_report.py --all
@@ -100,12 +111,23 @@ jobs:
           # snapshot is still downloaded for reference as
           # nov2024_snapshot.pdf and is deliberately not parsed — doing
           # so would overwrite the final data with five days of it.
-          python scripts/parse_report.py pdf-extract/nov2024.pdf \
-            --year 2024 --cycle fairfax-2024-general
-          # 2025 is the control: we already have hand-validated CSVs for it,
-          # so a parser that reconciles here is trustworthy on the others.
-          python scripts/parse_report.py pdf-extract/nov2025.pdf \
-            --year 2025 --cycle fairfax-2025-general
+          #
+          # Each parse is skipped when its PDF did not download, rather
+          # than failing the step: a report that is missing this run is
+          # already parsed into committed CSVs from the last one.
+          for spec in "nov2024 2024 fairfax-2024-general" \
+                      "nov2025 2025 fairfax-2025-general"; do
+            set -- $spec
+            if [ -f "pdf-extract/$1.pdf" ]; then
+              # 2025 is the control: hand-validated CSVs already exist for
+              # it, so a parser that reconciles there is trustworthy on
+              # the others.
+              python scripts/parse_report.py "pdf-extract/$1.pdf" \
+                --year "$2" --cycle "$3"
+            else
+              echo "::warning::pdf-extract/$1.pdf absent — skipping $3"
+            fi
+          done
 
       - name: Keep a local copy of each source PDF
         # Held in the repo under data/sources/ rather than public/, so it is
@@ -127,6 +149,12 @@ jobs:
             data/parsed/
 
       - name: Commit generated data
+        # Runs even when an earlier step failed. The commit is the only
+        # way anything here persists, so gating it on total success hands
+        # the flakiest external dependency a veto over every other step's
+        # work. Each step's output is independently verified before it is
+        # written, so a partial refresh is safe to land.
+        if: '!cancelled()'
         run: |
           set -u
           BRANCH="${{ github.ref_name }}"

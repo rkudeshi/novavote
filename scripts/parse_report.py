@@ -346,6 +346,16 @@ def main():
     sites_only = bool(failed) and all(
         section == "early" and key != "total" for section, key in failed
     )
+
+    # Checked before anything is written. This used to write first and
+    # exit non-zero after, which was safe only because a failing run also
+    # failed its workflow job and nothing was committed. The commit step
+    # no longer depends on every other step succeeding, so a parse that
+    # does not reconcile must leave no files behind at all.
+    if failed and not sites_only:
+        print("\n  RECONCILIATION FAILED — nothing written")
+        sys.exit(2)
+
     written = write_csvs(
         values, totals, col_order, Path(args.outdir), args.cycle,
         sites=not sites_only,
@@ -363,9 +373,6 @@ def main():
             f"to restore it."
         )
         return
-    if failed:
-        print("\n  RECONCILIATION FAILED — not trustworthy, do not ship these CSVs")
-        sys.exit(2)
     print("\n  all columns reconcile")
 
 
