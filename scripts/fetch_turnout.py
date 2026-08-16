@@ -7,7 +7,8 @@ denominator. Only Fairfax has one so far, because only Fairfax's own
 report prints it — eight of nine jurisdictions on the home page show a
 dash, and four of six Fairfax cycles drop out of the comparison.
 
-The state publishes one CSV per election with a row per locality. That
+The state publishes one CSV per election with a row per **precinct**,
+carrying that precinct's registration and turnout. Summed by locality it
 covers every jurisdiction and every cycle this project holds, from one
 source, which is what makes the column comparable across a row.
 
@@ -40,15 +41,31 @@ UA = {"User-Agent": "Mozilla/5.0 (NovaVote data survey)"}
 TIMEOUT = 40
 OUT = Path("data/registration.json")
 
-# Election date -> the state's own name for that election, which is also
-# its filename. Keep this in step with CYCLES in scripts/gen-data.mjs.
+# Election date -> the year whose November general file to look for. The
+# state's filenames are not uniform ("Turnout-2022 November General.csv"
+# is not the shape every year uses), so the directory index is read and
+# the year's November general file is found in it rather than guessed.
+# Keep this in step with CYCLES in scripts/gen-data.mjs.
 ELECTIONS = {
-    "2025-11-04": "2025 November General",
-    "2024-11-05": "2024 November General",
-    "2023-11-07": "2023 November General",
-    "2022-11-08": "2022 November General",
-    "2021-11-02": "2021 November General",
-    "2020-11-03": "2020 November General",
+    "2025-11-04": 2025,
+    "2024-11-05": 2024,
+    "2023-11-07": 2023,
+    "2022-11-08": 2022,
+    "2021-11-02": 2021,
+    "2020-11-03": 2020,
+}
+
+# These files are per *precinct*, not per locality — one row per precinct
+# with its own registration and turnout counts. A locality figure is the
+# sum of its precincts. Reading the first matching row instead gives one
+# precinct's numbers and looks entirely plausible: it reported 906 active
+# voters for Fairfax County, against the county's own 735,000.
+SUM_COLUMNS = {
+    "registered": ["active registered voters", "activeregisteredvoters"],
+    "registeredTotal": ["total registered voters", "totalregisteredvoters"],
+    "ballotsCast": ["total vote turnout", "totalvoteturnout"],
+    "absentee": ["absentee ballots", "absentee_ballots"],
+    "inPerson": ["in person ballots", "in_person_ballots"],
 }
 
 # The nine jurisdictions in scope. Keyed by the name this project uses;
@@ -111,56 +128,77 @@ def num(v):
     return int(v) if v not in ("", "-") else None
 
 
-def read_election(name):
-    url = BASE + urllib.parse.quote(f"Turnout-{name}.csv")
-    text = get(url)
-    rows = rows_of(text)
+def index():
+    """Every turnout filename the directory lists, newest years first."""
+    html = get(BASE)
+    names = re.findall(r'href=["\']([^"\']*Turnout[^"\']*\.csv)["\']', html, re.I)
+    return [urllib.parse.unquote(n.split("/")[-1]) for n in names]
+
+
+def november_general(names, year):
+    """The year's November general file, by name rather than by guess."""
+    hits = [n for n in names
+            if str(year) in n and re.search(r"nov", n, re.I)
+            and re.search(r"gen", n, re.I)
+            and not re.search(r"special|primary|recall|town|city elect", n, re.I)]
+    # Shortest wins: "Turnout-2022 November General.csv" over any file that
+    # merely mentions the same election in a longer, more specific name.
+    return sorted(hits, key=len)[0] if hits else None
+
+
+def read_election(filename):
+    url = BASE + urllib.parse.quote(filename)
+    rows = rows_of(get(url))
     if not rows:
-        raise SystemExit(f"{name}: no rows")
+        raise SystemExit(f"{filename}: no rows")
     header = list(rows[0])
 
     loc_col = pick_column(header, ["locality name", "locality", "county city"])
-    reg_col = pick_column(
-        header,
-        ["active voters", "registered voters", "total registered", "registered"],
-        # "% of registered" and similar are ratios, not counts.
-        avoid=("%", "percent", "pct"),
-    )
-    cast_col = pick_column(
-        header,
-        ["total ballots cast", "ballots cast", "total voted", "voted"],
-        avoid=("%", "percent", "pct", "absentee", "early"),
-    )
-    print(f"\n== {name}")
+    print(f"   file: {filename}")
     print(f"   columns: {header}")
-    print(f"   locality={loc_col!r}  registered={reg_col!r}  cast={cast_col!r}")
-    if not loc_col or not reg_col:
-        raise SystemExit(f"{name}: could not identify locality/registered columns")
+    if not loc_col:
+        raise SystemExit(f"{filename}: no locality column")
 
-    by_name = {}
+    cols = {}
+    for field, wants in SUM_COLUMNS.items():
+        c = pick_column(header, wants, avoid=("%", "percent", "pct"))
+        if c:
+            cols[field] = c
+    print(f"   locality={loc_col!r}  summing={cols}")
+    if "registered" not in cols:
+        raise SystemExit(f"{filename}: no registered-voter column")
+
+    # One row per precinct: add them up per locality.
+    tally = {}
+    precincts = {}
     for r in rows:
         key = norm(r.get(loc_col))
-        if key:
-            by_name[key] = r
+        if not key:
+            continue
+        acc = tally.setdefault(key, {f: 0 for f in cols})
+        precincts[key] = precincts.get(key, 0) + 1
+        for field, c in cols.items():
+            acc[field] += num(r.get(c)) or 0
 
     out = {}
     for want in LOCALITIES:
-        r = by_name.get(norm(want))
-        if r is None and want.endswith(" City"):
+        key = norm(want)
+        acc = tally.get(key)
+        if acc is None and want.endswith(" City"):
             # Some files drop the "City" suffix; fall back only when the
             # bare name is not also a county in this scope.
             bare = norm(want[: -len(" City")])
-            if f"{bare} county" not in by_name:
-                r = by_name.get(bare)
-        if r is None:
-            print(f"   [miss] {want}")
+            if f"{bare} county" not in tally:
+                acc = tally.get(bare)
+                key = bare
+        if acc is None:
+            near = [k for k in tally if norm(want).split()[0] in k]
+            print(f"   [miss] {want}   (names present: {near[:4]})")
             continue
-        entry = {"registered": num(r[reg_col])}
-        if cast_col:
-            entry["ballotsCast"] = num(r[cast_col])
-        out[want] = entry
-        print(f"   {want:<24} registered {entry['registered']!s:>9}"
-              f"  cast {entry.get('ballotsCast')!s:>9}")
+        out[want] = acc
+        print(f"   {want:<24} {precincts.get(key, 0):>4} precincts  "
+              f"registered {acc['registered']:>9,}  "
+              f"cast {acc.get('ballotsCast', 0):>9,}")
     return out
 
 
@@ -170,14 +208,24 @@ def main():
                     help="write data/registration.json (default is dump only)")
     a = ap.parse_args()
 
+    names = index()
+    print(f"directory lists {len(names)} turnout files; "
+          f"{sum(1 for n in names if re.search(r'20(2[0-9])', n))} from the 2020s")
+
     doc = {}
-    for date, name in ELECTIONS.items():
+    for date, year in ELECTIONS.items():
+        print(f"\n== {year} November general")
+        filename = november_general(names, year)
+        if not filename:
+            near = [n for n in names if str(year) in n][:6]
+            print(f"   not in the index (files mentioning {year}: {near})")
+            continue
         try:
-            doc[date] = read_election(name)
+            doc[date] = read_election(filename)
         except urllib.error.HTTPError as e:
-            print(f"\n== {name}\n   HTTP {e.code} {e.reason}")
+            print(f"   HTTP {e.code} {e.reason}")
         except Exception as e:                       # noqa: BLE001
-            print(f"\n== {name}\n   failed: {type(e).__name__}: {e}")
+            print(f"   failed: {type(e).__name__}: {e}")
 
     print("\n-- check against Fairfax's own reports")
     bad = []
