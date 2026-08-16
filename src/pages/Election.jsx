@@ -4,7 +4,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Link } from '../lib/router.jsx';
-import { fmt, fullDate, longDate, pct, shortDate } from '../lib/format.js';
+import { fmt, fullDate, pct, shortDate } from '../lib/format.js';
 import { summary, timeline } from '../lib/derive.js';
 import { useInView } from '../lib/motion.js';
 import SurgeChart from '../components/charts/SurgeChart.jsx';
@@ -13,7 +13,7 @@ import SiteMap from '../components/charts/SiteMap.jsx';
 import ReportSummary from '../components/charts/ReportSummary.jsx';
 import Treemap from '../components/charts/Treemap.jsx';
 import Schedule from '../components/charts/Schedule.jsx';
-import WeatherIcon from '../components/WeatherIcon.jsx';
+import SourceTables from '../components/charts/SourceTables.jsx';
 
 /* Sequential ramp for the site treemap — sites are ranked by size, so a
    single hue stepped light-to-dark encodes that order; a categorical
@@ -231,7 +231,7 @@ export default function Election({ ds, all }) {
         </>
       )}
 
-      <DataTable ds={ds} />
+      <SourceTables ds={ds} />
     </>
   );
 }
@@ -429,184 +429,4 @@ function peakOf(ds, key) {
     if (v != null && v > best.v) best = { v, date: d.date };
   });
   return best;
-}
-
-/* Column tints. Each numeric column is scaled against its own maximum and
-   tinted with its method's hue, so a column of small numbers still shows
-   its own shape instead of being flattened by a larger column. Alpha tops
-   out well below full so the figure stays legible in ink. */
-const COL_RGB = {
-  inPerson: [42, 120, 214],
-  returnedMail: [235, 104, 52],
-  returnedDropbox: [27, 175, 122],
-  ballotsMailed: [124, 135, 155],
-};
-const MAX_ALPHA = 0.5;
-
-function DataTable({ ds }) {
-  const [sortKey, setSortKey] = useState('date');
-  const [dir, setDir] = useState('asc');
-  const [shade, setShade] = useState(true);
-
-  const cols = [
-    { k: 'date', l: 'Date', render: (r) => longDate(r.date) },
-    /* Two-line headers: the group on top, the specific measure beneath.
-       Splitting the label is what lets the column be as narrow as its
-       numbers rather than as wide as its name — which is most of what was
-       pushing this table off the side of a phone. */
-    { k: 'inPerson', l: 'In person', l2: 'ballots' },
-    /* A column the dataset does not record is left out entirely rather
-       than filled with dashes: an empty column is still column width,
-       and on a phone that is the scarce thing. */
-    { k: 'returnedMail', l: 'Vote by mail', l2: ds.detail.returnRoute ? 'by mail' : 'returned' },
-    ds.detail.returnRoute && { k: 'returnedDropbox', l: 'Vote by mail', l2: 'drop box' },
-    ds.detail.ballotsIssued && { k: 'ballotsMailed', l: 'Issued', l2: 'by mail' },
-    ds.days.some((d) => d.weather) && {
-      k: 'weather',
-      l: 'Weather',
-      l2: '',
-      sortable: false,
-      render: (r) =>
-        r.weather ? (
-          <span className={`wx ${r.weather.wet ? 'is-wet' : ''} ${r.weather.snowy ? 'is-snowy' : ''}`}>
-            <WeatherIcon wet={r.weather.wet} snowy={r.weather.snowy} /> {r.weather.label},{' '}
-            {Math.round(r.weather.tempMax)}°/{Math.round(r.weather.tempMin)}°
-            {r.weather.precip >= 0.01 ? ` · ${r.weather.precip.toFixed(2)}″` : ''}
-          </span>
-        ) : '—',
-    },
-  ].filter(Boolean);
-
-  const colMax = useMemo(() => {
-    const m = {};
-    for (const c of cols) {
-      if (c.k === 'date' || c.k === 'weather') continue;
-      m[c.k] = Math.max(...ds.days.map((d) => d[c.k] ?? 0), 1);
-    }
-    return m;
-  }, [ds]);
-
-  const tint = (key, v) => {
-    if (!shade || v == null || !COL_RGB[key]) return undefined;
-    const [r, g, b] = COL_RGB[key];
-    // sqrt so the long tail of small days stays visible rather than
-    // collapsing to white against a few very large ones.
-    const a = Math.sqrt(Math.max(0, v) / colMax[key]) * MAX_ALPHA;
-    return `rgba(${r},${g},${b},${a.toFixed(3)})`;
-  };
-
-  const rows = useMemo(() => {
-    const a = [...ds.days];
-    a.sort((x, y) => {
-      if (sortKey === 'date') {
-        return dir === 'asc'
-          ? x.date.localeCompare(y.date)
-          : y.date.localeCompare(x.date);
-      }
-      const nx = x[sortKey] ?? -1;
-      const ny = y[sortKey] ?? -1;
-      return dir === 'asc' ? nx - ny : ny - nx;
-    });
-    return a;
-  }, [ds, sortKey, dir]);
-
-  const click = (k) => {
-    if (k === sortKey) setDir(dir === 'asc' ? 'desc' : 'asc');
-    else {
-      setSortKey(k);
-      setDir(k === 'date' ? 'asc' : 'desc');
-    }
-  };
-
-  const download = () => {
-    const fields = [
-      ['early_in_person', (d) => d.inPerson],
-      [ds.detail.returnRoute ? 'returned_by_mail' : 'vote_by_mail_returned',
-        (d) => d.returnedMail],
-      ...(ds.detail.returnRoute
-        ? [['returned_by_dropbox', (d) => d.returnedDropbox]] : []),
-      ...(ds.detail.ballotsIssued
-        ? [['ballots_mailed', (d) => d.ballotsMailed]] : []),
-      ...ds.sites.map((s) => [s.key, (d) => d.sites[s.key]]),
-    ];
-    const lines = [['date', ...fields.map(([n]) => n)].join(',')];
-    ds.days.forEach((d) => {
-      lines.push([d.date, ...fields.map(([, get]) => get(d) ?? '')].join(','));
-    });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${ds.id}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  return (
-    <section className="section">
-      <div className="wrap">
-        <div className="sec-head">
-          <div>
-            <div className="eyebrow">Full detail</div>
-            <h2 className="h2">Every day, every number</h2>
-          </div>
-          <div className="table-tools">
-            <label className="rhythm-check">
-              <input
-                type="checkbox"
-                checked={shade}
-                onChange={(e) => setShade(e.target.checked)}
-              />
-              Shade by value
-            </label>
-            <button className="btn" onClick={download}>Download CSV</button>
-          </div>
-        </div>
-        <div className="card tablewrap">
-          <table className="table">
-            <thead>
-              <tr>
-                {cols.map((c) => (
-                  <th
-                    key={c.k}
-                    onClick={() => c.sortable !== false && click(c.k)}
-                    className={`${sortKey === c.k ? 'is-on' : ''} ${c.sortable === false ? 'is-static' : ''}`}
-                    aria-sort={
-                      sortKey === c.k
-                        ? dir === 'asc' ? 'ascending' : 'descending'
-                        : 'none'
-                    }
-                  >
-                    <span className="th-l1">
-                      {c.l}
-                      {c.sortable !== false && (
-                        <span className="caret">
-                          {sortKey === c.k ? (dir === 'asc' ? '▲' : '▼') : '↕'}
-                        </span>
-                      )}
-                    </span>
-                    <span className="th-l2">{c.l2 || ' '}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.date}>
-                  {cols.map((c) => (
-                    <td
-                      key={c.k}
-                      className={c.k === 'date' ? 'td-date' : c.k === 'weather' ? 'td-wx' : 'td-num'}
-                      style={{ background: tint(c.k, r[c.k]) }}
-                    >
-                      {c.render ? c.render(r) : fmt(r[c.k])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
 }

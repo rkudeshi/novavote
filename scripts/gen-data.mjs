@@ -263,6 +263,84 @@ const SITE_LABELS = {
   west_springfield: 'West Springfield',
 };
 
+/* ------------------------------------------------------------------
+   Source tables.
+
+   The report is a stack of separate tables — ballots issued, returned by
+   mail, returned by drop box, mail requesters who voted in person
+   instead, and turnout by site — each with its own sub-columns. The rest
+   of the site works with the totals; this carries each table through
+   whole so the reader can see the same breakdowns.
+
+   The first column of each spec is the table's total and is always
+   shown. Everything after it is a sub-column, hidden until asked for:
+   the UOCAVA and domestic splits are a small fraction of every table and
+   showing them by default triples the width for a reader who wanted the
+   total.
+
+   Column sets differ by cycle and are emitted from what each CSV
+   actually has — the 2020–2023 workbooks carry totals only, and 2024
+   splits its returns differently from 2025.
+------------------------------------------------------------------ */
+const TABLE_SPECS = [
+  {
+    key: 'issued',
+    label: 'Issued by mail',
+    file: 'mailed_absentee_ballots',
+    hue: [124, 135, 155],
+    cols: [
+      ['total_mailed', 'Total issued'],
+      ['domestic', 'Domestic'],
+      ['uocava_mail', 'UOCAVA by mail'],
+      ['uocava_email', 'UOCAVA by email'],
+    ],
+  },
+  {
+    key: 'mail',
+    label: 'Returned by mail',
+    file: 'returned_by_mail',
+    hue: [235, 104, 52],
+    cols: [
+      ['total_returned', 'Total returned'],
+      ['returned_by_mail', 'By mail'],
+      ['returned_by_email', 'By email'],
+      ['returned_uocava', 'UOCAVA'],
+      ['undeliverable_subset_of_mail', 'Undeliverable'],
+      ['undeliverable', 'Undeliverable'],
+    ],
+    /* Not a column. On 14 of 2025's dates the undeliverable sub-count is
+       best-effort (see data/README.md), and the row says so rather than
+       the figure being dropped or silently presented as verified. */
+    estimatedFlag: 'undeliverable_is_estimated',
+  },
+  {
+    key: 'dropbox',
+    label: 'Returned by drop box',
+    file: 'returned_by_dropbox',
+    hue: [27, 175, 122],
+    cols: [
+      ['total_returned_dropbox', 'Total returned'],
+      ['dropbox_mail_ballot', 'Mail ballot'],
+      ['dropbox_email_ballot', 'Email ballot'],
+      ['dropbox_domestic', 'Domestic'],
+      ['dropbox_uocava', 'UOCAVA'],
+      ['dropbox_email_uocava', 'UOCAVA by email'],
+      ['returned_unused', 'Returned unused'],
+    ],
+  },
+  {
+    key: 'instead',
+    label: 'Voted in person instead',
+    file: 'ab_applicants_voted_early_in_person',
+    hue: [154, 122, 196],
+    cols: [
+      ['total', 'Total'],
+      ['ballot_not_surrendered', 'Ballot not surrendered'],
+      ['ballot_surrendered', 'Ballot surrendered'],
+    ],
+  },
+];
+
 /* Site locations come from data/site_locations.json: real addresses
    supplied by the county, geocoded by scripts/geocode_sites.py against the
    Census geocoder — the same reference the boundary geometry comes from,
@@ -300,6 +378,10 @@ function readCsv(file) {
 }
 
 const num = (v) => (v === '' || v === undefined || v === null ? null : Number(v));
+
+/* Boolean columns arrive spelled by whichever script wrote them —
+   build_csvs.py emits Python's "True", parse_dal.py emits "true". */
+const isTrue = (v) => String(v).toLowerCase() === 'true';
 
 /** First column present out of `names`. */
 const pick = (row, names) => {
@@ -546,6 +628,64 @@ function buildCycle(cycle) {
     );
   }
 
+  /** One source table, or null if this cycle's CSV isn't there. */
+  const sourceTable = (spec) => {
+    const rows = readCsv(f(spec.file));
+    if (!rows?.length) return null;
+    const present = spec.cols.filter(([k]) => rows[0][k] !== undefined);
+    if (!present.length) return null;
+    const flag = spec.estimatedFlag && rows[0][spec.estimatedFlag] !== undefined
+      ? spec.estimatedFlag
+      : null;
+    return {
+      key: spec.key,
+      label: spec.label,
+      hue: spec.hue,
+      columns: present.map(([k, label], i) => ({ key: k, label, detail: i > 0 })),
+      rows: rows.map((r) => ({
+        date: r.date,
+        values: Object.fromEntries(present.map(([k]) => [k, num(r[k])])),
+        ...(flag && isTrue(r[flag]) ? { estimated: true } : {}),
+      })),
+      totals: Object.fromEntries(
+        present.map(([k]) => [k, rows.reduce((s, r) => s + (num(r[k]) || 0), 0)]),
+      ),
+      /* The report's own caveat, carried with the table it applies to
+         rather than as a footnote the reader has to connect back. */
+      note: flag && rows.some((r) => isTrue(r[flag]))
+        ? 'Marked undeliverable figures are best-effort and not independently verified.'
+        : null,
+    };
+  };
+
+  const tables = TABLE_SPECS.map(sourceTable).filter(Boolean);
+
+  // Turnout by site is the one table whose columns are the cycle's own
+  // site roster rather than a fixed list.
+  if (sites.length) {
+    tables.push({
+      key: 'sites',
+      label: 'In person by site',
+      hue: [42, 120, 214],
+      columns: [
+        { key: 'total', label: 'Total', detail: false },
+        ...sites.map((s) => ({ key: s.key, label: s.label, detail: false })),
+      ],
+      rows: early.map((r) => ({
+        date: r.date,
+        values: {
+          total: num(r.total),
+          ...Object.fromEntries(sites.map((s) => [s.key, siteValue(r, s.key)])),
+        },
+      })),
+      totals: {
+        total: totals.inPerson,
+        ...Object.fromEntries(sites.map((s) => [s.key, s.total])),
+      },
+      note: null,
+    });
+  }
+
   const { hours, gaps, schedule } = buildSchedule(
     cycle.id, days, sites.map((s) => s.key),
   );
@@ -573,6 +713,7 @@ function buildCycle(cycle) {
     totals,
     sites,
     days,
+    tables,
     hours,
     schedule,
   };
@@ -668,6 +809,40 @@ function buildLocalityCycle(cycle) {
     totals,
     sites: [],
     days,
+    /* The same shape as a report cycle's, with the one table this source
+       supports. The tabbed view then needs no special case — it renders
+       whatever tables a dataset has. */
+    tables: [{
+      key: 'daily',
+      label: 'Daily totals',
+      hue: [42, 120, 214],
+      columns: [
+        { key: 'inPerson', label: 'Early in person', detail: false },
+        { key: 'returnedMail', label: 'Vote by mail returned', detail: false },
+        { key: 'inPersonCumulative', label: 'In person, running total', detail: true },
+        { key: 'mailCumulative', label: 'By mail, running total', detail: true },
+      ],
+      rows: kept.map((r) => ({
+        date: r.date,
+        values: {
+          inPerson: num(r.early_in_person_daily),
+          returnedMail: num(r.mail_returned_daily),
+          inPersonCumulative: num(r.early_in_person_cumulative),
+          mailCumulative: num(r.mail_returned_cumulative),
+        },
+        ...(isTrue(r.is_correction) ? { corrected: true } : {}),
+        ...(Number(r.span_days) > 1 ? { span: Number(r.span_days) } : {}),
+      })),
+      totals: {
+        inPerson: totals.inPerson,
+        returnedMail: totals.returnedMail,
+        inPersonCumulative: null,
+        mailCumulative: null,
+      },
+      note: kept.some((r) => Number(r.span_days) > 1)
+        ? 'Marked days are covered by a single combined figure, shown on the first day of the span.'
+        : null,
+    }],
     hours: null,
     schedule: null,
   };

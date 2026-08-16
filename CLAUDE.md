@@ -406,6 +406,20 @@ say what the reader is looking at and what it is a share of, then stop.
 no decimal at or above 10% and one below it — a tenth is noise on "68%"
 but load-bearing on "6.4%". Pass an explicit `digits` only to override.
 
+**The full table is tabbed, one tab per source table.** The report is a
+stack of separate tables — ballots issued, returned by mail, returned by
+drop box, mail requesters who voted in person instead, turnout by site —
+each with its own sub-columns. `TABLE_SPECS` in `gen-data.mjs` carries
+them through whole and `SourceTables.jsx` renders them; a cycle gets only
+the tables and columns its CSVs actually have, so 2020–2023 (totals only)
+and 2024 (which splits returns differently from 2025) each describe
+themselves. **Sub-columns are hidden by default** — UOCAVA and domestic
+splits are a small fraction of every table and showing them triples the
+width for a reader who came for the total. Each table's own column totals
+are pinned to the bottom of the scroll area, which is how a reader checks
+a column against a published figure. Row marks (best-effort undeliverable,
+upstream correction, multi-day span) sit against the date they qualify.
+
 **Site turnout is a treemap** (`Treemap.jsx`, squarified). Tiles fill the
 box with no gaps so areas are compared adjacently; a loose grid of
 free-standing squares made the reader estimate across whitespace. Tile

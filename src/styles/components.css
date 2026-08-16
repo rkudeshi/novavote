@@ -865,3 +865,25 @@
   letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
   margin: 0 0 14px;
 }
+
+/* ---------------- source-table tabs and row marks ------------------ */
+/* One tab per table in the report. The strip wraps rather than
+   scrolling: on a phone a hidden tab is a tab nobody finds. */
+.seg-tabs { flex-wrap: wrap; margin: 0 0 16px; }
+
+/* Row marks sit against the date they qualify, not in a footnote the
+   reader has to connect back. */
+.mark {
+  font-size: 11px; color: var(--muted); margin-left: 4px;
+  text-decoration: none; border: 0; cursor: help;
+}
+
+/* The column total stays put while the days scroll past it — the whole
+   reason to show it is to check a column against a published figure, and
+   that is a comparison you make at any scroll position. Sticky needs an
+   opaque background, or the rows show through. */
+.table tfoot td {
+  position: sticky; bottom: 0; z-index: 1;
+  border-top: 2px solid var(--line-strong);
+  font-weight: 700; background: var(--surface-sunk);
+}
