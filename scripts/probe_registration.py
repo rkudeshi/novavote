@@ -40,21 +40,26 @@ LOCALITIES = [
 # Machine-readable first. The state's open-data portal runs CKAN, whose
 # API answers with JSON and needs no scraping; only if that turns up
 # nothing do the HTML landing pages matter.
+# Round 1 ruled out the open-data portal (its CKAN index has no elections
+# organisation and full-text search returns motor-vehicle registrations)
+# and the results host's guessed paths. What it did turn up was ELECT's
+# own CSV directory, linked from the registration/turnout landing page —
+# a machine-readable index, which is exactly what is wanted. Round 2
+# walks it.
 CANDIDATES = [
-    "https://data.virginia.gov/api/3/action/package_search?q=registered+voters&rows=25",
-    "https://data.virginia.gov/api/3/action/package_search?q=registration+statistics&rows=25",
-    "https://data.virginia.gov/api/3/action/organization_show"
-    "?id=virginia-department-of-elections&include_datasets=true",
-    "https://www.elections.virginia.gov/resultsreports/registrationturnout-statistics/",
-    "https://www.elections.virginia.gov/casting-a-ballot/registration-statistics/",
-    "https://www.elections.virginia.gov/resultsreports/registration-statistics/registrant-counts/",
-    "https://results.elections.virginia.gov/vaelections/2025%20November%20General/Json/ElectionEvent.json",
-    "https://results.elections.virginia.gov/vaelections/2025%20November%20General/Index.html",
+    "https://apps.elections.virginia.gov/SBE_CSV/",
+    "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/",
+    "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/ELECTIONTURNOUT/",
+    "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/REGISTRATIONSTATISTICS/",
+    "https://apps.elections.virginia.gov/SBE_CSV/REGISTRANT/",
+    "https://www.elections.virginia.gov/resultsreports/registration-statistics/",
 ]
 
 # Links worth following out of a landing page.
 INTERESTING = re.compile(
-    r"(\.csv|\.xlsx?|\.zip|\.json|registrant|registration|registered|turnout)", re.I
+    r"(\.csv|\.xlsx?|\.zip|\.json|registrant|registration|registered|turnout"
+    r"|/SBE_CSV|/ELECTIONS?/|20(2[0-9])/?$)",
+    re.I,
 )
 
 
@@ -102,7 +107,7 @@ def show_html(base, body):
             continue
         seen.add(href)
         print(f"    -> {urllib.parse.urljoin(base, href)}")
-        if len(seen) >= 25:
+        if len(seen) >= 60:
             break
     if not seen:
         print(f"    (html, {len(text)} chars, no data-looking links)")

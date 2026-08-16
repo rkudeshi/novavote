@@ -104,7 +104,10 @@ def probe(url):
         return None
 
     OUT.mkdir(exist_ok=True)
-    name = url.rstrip("/").split("/")[-1] or "index"
+    # The last path segment of a query URL carries characters an artifact
+    # upload rejects (a Wayback CDX query ends in "statuscode:200"), which
+    # failed the whole upload step and lost the rest of the dump with it.
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", url.rstrip("/").split("/")[-1]) or "index"
     (OUT / f"{name}").write_text(json.dumps(data, indent=2)[:400_000], encoding="utf-8")
     print("[json] top-level keys:", list(data)[:40] if isinstance(data, dict) else f"list[{len(data)}]", flush=True)
     print(json.dumps(data, indent=2)[:2500], flush=True)
