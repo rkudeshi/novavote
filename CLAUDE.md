@@ -400,35 +400,36 @@ every push to `main`.
   `src/data/jurisdictions.js` is the scope list; a jurisdiction with no
   reconciled dataset carries `total: null` and renders as "no figures
   recorded yet" — **never** fill it with an estimate or a press figure.
-- **Registered-voter counts.** Share of electorate is the measure that
-  compares a county of 810,000 with a city of 10,000 on equal footing, and
-  most rows still have no denominator. Progress and dead ends so far:
-  - The state's **per-election turnout files**
-    (`apps.elections.virginia.gov/SBE_CSV/ELECTIONS/ELECTIONTURNOUT/`,
-    read by `scripts/fetch_turnout.py`) are **per precinct**, and summed
-    by locality their registration columns reconcile — Fairfax 742,649 in
-    2022 against the county's own 735,000, and 739,334 in 2021 against
-    730,300. That directory **stops after 2022**, so it supplies 2020
-    (including the figure Fairfax's own report never printed), 2021 and
-    2022, and nothing later.
+- **Registered-voter counts are in.** `data/registration.json` holds
+  active registered voters per locality per November general, 2020-2025,
+  supplied directly. It is the **authority** for that figure, ahead of a
+  cycle's own `registeredVoters`, because it is one consistent
+  active-voter series across every locality and year — and consistency is
+  the whole point of a column whose job is to compare a county of 760,000
+  with a city of 11,000.
+  - That ordering matters most for **Fairfax 2025**, where the county's
+    own report prints 809,786 against the table's 760,554. Every other
+    Fairfax year agrees to about 1%; this one is 6% apart, and 809,786 is
+    almost certainly *total* registrants rather than active — Fairfax's
+    active-to-total ratio in the state's 2022 per-precinct file is 0.9424,
+    and 809,786 x 0.9424 is 763,113. Don't "restore" the county figure
+    without resolving that.
+  - `scripts/fetch_turnout.py` is the second opinion, not the source. It
+    **writes nothing**: it sums the state's per-precinct turnout files by
+    locality and prints any disagreement. Its coverage is 2020-2022 only
+    — nothing in that directory's index mentions 2024 or 2025, and 2023
+    has only special elections.
   - Its **turnout columns do not reconcile** and are deliberately unread:
     summed by locality they put Fairfax 2020 at 1,020,701 ballots against
     751,830 active voters, a 136% turnout against a real figure near
     594,000. Do not resurrect them without working out what they count.
   - Reading the **first matching row** instead of summing gives one
     precinct's numbers and looks entirely plausible (906 active voters for
-    Fairfax County). The assertion against Fairfax's own reports is what
-    caught it — keep it.
-  - **2020, 2021 and 2022 are done** and committed as
-    `data/registration.json` by the extract workflow. That gave Fairfax
-    2020 the denominator its own report never printed.
-  - **2023-2025 are still open**, which is the gap that matters: it is
-    every 2025 locality. The next candidate is the per-year
-    registration-statistics pages on elections.virginia.gov, which carry
-    monthly registrant counts by locality as xlsx.
-  - A cycle's own `registeredVoters` wins over the fetched figure: it
-    comes from the locality's own report, and swapping it would silently
-    move a number already on the page.
+    Fairfax County). Keep the sum.
+  - **Manassas Park City** is absent from the supplied table; its
+    2020-2022 figures come from the state files and 2023-2025 are blank,
+    so it is the one row still showing a dash. **Stafford County** is
+    recorded but is not in the tracked scope and produces no dataset.
 - **Real geocoding** for site coordinates.
 - **Precinct-level data**: the right upstream source is the Virginia Dept.
   of Elections (ELECT) — Daily Absentee List (DAL), Registered Voter List

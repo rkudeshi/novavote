@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
-"""Registered-voter counts per locality, from the state's turnout files.
+"""Check data/registration.json against the state's own turnout files.
 
-Share of the electorate is the one measure that compares a county of
-810,000 with a city of 10,000 on equal footing, and it needs a
-denominator. Only Fairfax has one so far, because only Fairfax's own
-report prints it — eight of nine jurisdictions on the home page show a
-dash, and four of six Fairfax cycles drop out of the comparison.
+This **writes nothing**. `data/registration.json` is supplied directly
+and is the authority for active registered voters; this is the second
+opinion on it. The state publishes one CSV per election with a row per
+**precinct**, and summed by locality its registration columns are an
+independent count of the same thing.
 
-The state publishes one CSV per election with a row per **precinct**,
-carrying that precinct's registration and turnout. Summed by locality it
-covers every jurisdiction and every cycle this project holds, from one
-source, which is what makes the column comparable across a row.
+Coverage is partial and that is expected: the turnout directory carries
+November generals for 2020, 2021 and 2022 and nothing later — nothing in
+its index mentions 2024 or 2025 at all, and 2023 has only special
+elections. So this checks three of six cycles. A disagreement is printed,
+never acted on.
 
 RUNS IN CI. The dev sandbox cannot reach this host.
 
 SCOPE: this project holds no results or partisan data by design. These
-files are turnout files, not results files, and only the registration
-count and the ballots-cast total are read from them. Nothing here reads a
-candidate, a party, or a contest.
-
-The extraction is checked rather than trusted: Fairfax's own reports
-print an active-voter count for four cycles, and this asserts the state's
-figure against each of them before writing anything. If the column being
-read were the wrong one, those four would not line up.
+are turnout files, not results files, and only the registration columns
+are read. Nothing here reads a candidate, a party, or a contest.
 """
 
 import argparse
@@ -39,7 +34,13 @@ from pathlib import Path
 BASE = "https://apps.elections.virginia.gov/SBE_CSV/ELECTIONS/ELECTIONTURNOUT/"
 UA = {"User-Agent": "Mozilla/5.0 (NovaVote data survey)"}
 TIMEOUT = 40
-OUT = Path("data/registration.json")
+TABLE = Path("data/registration.json")
+
+# How far the two may differ before it is worth stopping over. They are
+# both counts of active registrants but not necessarily on the same day,
+# and a few weeks of registration either side of an election moves the
+# figure by a fraction of a percent.
+TOLERANCE = 0.03
 
 # Election date -> the year whose November general file to look for. The
 # state's filenames are not uniform ("Turnout-2022 November General.csv"
@@ -83,16 +84,6 @@ LOCALITIES = [
     "Falls Church City", "Manassas City", "Manassas Park City",
 ]
 
-# Fairfax's own reports print an active-voter count. These are the check:
-# a state figure that disagrees with the county's by more than a little
-# means the wrong column is being read.
-KNOWN = {
-    "2025-11-04": 809786,
-    "2023-11-07": 717440,
-    "2022-11-08": 735000,
-    "2021-11-02": 730300,
-}
-TOLERANCE = 0.03
 
 
 def get(url):
@@ -209,69 +200,52 @@ def read_election(filename):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--write", action="store_true",
-                    help="write data/registration.json (default is dump only)")
-    a = ap.parse_args()
+    argparse.ArgumentParser(description=__doc__).parse_args()
 
+    table = json.loads(TABLE.read_text())["elections"]
     names = index()
     print(f"directory lists {len(names)} turnout files")
 
-    doc = {}
-    resolved = {}
+    checked = worst = 0
+    misses = []
     for date, year in ELECTIONS.items():
         print(f"\n== {year} November general")
         filename = november_general(names, year)
-        resolved[year] = filename
         if not filename:
-            print("   not in the index")
+            print("   not in the index — no second opinion for this cycle")
             continue
         try:
-            doc[date] = read_election(filename)
+            state = read_election(filename)
         except urllib.error.HTTPError as e:
             print(f"   HTTP {e.code} {e.reason}")
+            continue
         except Exception as e:                       # noqa: BLE001
             print(f"   failed: {type(e).__name__}: {e}")
-
-    # Printed last, and printed always: on a long CI log the tail is what
-    # gets read, and which years resolved is the first thing to know.
-    print("\n-- resolved files")
-    for year, filename in sorted(resolved.items(), reverse=True):
-        if filename:
-            print(f"   {year}  {filename}")
-        else:
-            near = sorted(n for n in names if str(year) in n)
-            print(f"   {year}  MISSING — index entries mentioning {year}: "
-                  f"{near[:8] if near else 'none'}")
-
-    print("\n-- check against Fairfax's own reports")
-    bad = []
-    for date, want in KNOWN.items():
-        got = doc.get(date, {}).get("Fairfax County", {}).get("registered")
-        if got is None:
-            print(f"   {date}  no figure fetched")
             continue
-        off = abs(got - want) / want
-        flag = "OK " if off <= TOLERANCE else "OFF"
-        print(f"   {date}  {got:>9,} vs {want:>9,} from the county — "
-              f"{off * 100:.2f}% {flag}")
-        if off > TOLERANCE:
-            bad.append(date)
-    if bad:
-        raise SystemExit(
-            f"registration figures disagree with the county's own for {bad}; "
-            f"writing nothing"
-        )
 
-    if not a.write:
-        print("\n(dump only — pass --write to save)")
-        return
-    if not any(doc.values()):
-        raise SystemExit("nothing fetched; writing nothing")
+        for name, acc in sorted(state.items()):
+            want = table.get(date, {}).get(name, {}).get("registered")
+            if want is None:
+                print(f"   [gap] {name}: state says {acc['registered']:,}, "
+                      f"the table has no figure")
+                continue
+            got = acc["registered"]
+            off = abs(got - want) / want
+            checked += 1
+            worst = max(worst, off)
+            if off > TOLERANCE:
+                misses.append(f"{date} {name}: state {got:,} vs table {want:,} "
+                              f"({off * 100:.1f}%)")
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"elections": doc}, indent=2) + "\n", encoding="utf-8")
-    print(f"\nwrote {OUT}")
+    print(f"\n-- {checked} figures compared, worst {worst * 100:.2f}% apart")
+    if misses:
+        print(f"   {len(misses)} beyond {TOLERANCE * 100:.0f}%:")
+        for m in misses:
+            print(f"     {m}")
+        print("   The table stands — it is the authority. This is a flag, "
+              "not a correction.")
+    else:
+        print("   every compared figure agrees within tolerance")
 
 
 if __name__ == "__main__":

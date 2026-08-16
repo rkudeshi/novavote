@@ -61,12 +61,12 @@ jobs:
         continue-on-error: true
         run: python scripts/fetch_weather.py
 
-      - name: Fetch registered-voter counts
-        # Per-locality registration from the state's own per-election
-        # files. It writes nothing unless its figures agree with Fairfax's
-        # own reports, so a bad parse cannot ship a denominator.
+      - name: Check registered-voter counts
+        # data/registration.json is supplied and committed; this is the
+        # second opinion on it, from the state's own per-election files.
+        # It writes nothing — a disagreement is printed, not applied.
         continue-on-error: true
-        run: python scripts/fetch_turnout.py --write
+        run: python scripts/fetch_turnout.py
 
       - name: Discover published reports
         continue-on-error: true
@@ -128,7 +128,7 @@ jobs:
           # path that does not exist aborts the whole command and stages
           # nothing, so one step that failed to produce its output would
           # silently throw away every other step's.
-          for p in data/sources data/parsed data/registration.json \
+          for p in data/sources data/parsed \
                    data/site_locations.json data/weather.json \
                    src/data/fairfax-boundary.json src/fonts src/styles/fonts.css; do
             [ -e "$p" ] && git add "$p" || echo "no $p to add"

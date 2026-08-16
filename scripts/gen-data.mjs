@@ -424,24 +424,24 @@ const pick = (row, names) => {
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 /**
- * Registered-voter counts per locality per election.
+ * Active registered voters per locality per election.
  *
- * Written by scripts/fetch_turnout.py from the state's own per-election
- * turnout files (CI, since the sandbox cannot reach that host). Share of
- * the electorate is the measure that compares a county of 810,000 with a
- * city of 10,000 on equal footing, and without this only Fairfax has a
- * denominator.
+ * `data/registration.json`, supplied directly. It is the authority for
+ * this figure, ahead of a cycle's own `registeredVoters`, because it is
+ * one consistent active-voter series across every locality and year —
+ * and consistency is the whole point of a column whose job is to compare
+ * a county of 760,000 with a city of 11,000. A per-cycle figure from a
+ * different publisher with a different definition would make the column
+ * compare definitions instead of places.
  *
- * A cycle's own registeredVoters wins where it has one: that comes from
- * the locality's own report, and swapping it for the state's figure
- * would silently move a number already on the page. The two are asserted
- * to agree in fetch_turnout.py, so the fallback is not a different kind
- * of number — just a different publisher of the same one.
- *
- * Only the registration counts come from those files. Their turnout
- * columns do not reconcile — summed by locality they put Fairfax 2020 at
- * a 136% turnout — so nothing is taken from them. See the note in
- * fetch_turnout.py.
+ * That ordering matters most for Fairfax 2025, where the county's own
+ * report prints 809,786 against the table's 760,554 — 6% apart, where
+ * every other Fairfax year agrees to about 1%. 809,786 is almost
+ * certainly *total* registrants rather than active: Fairfax's
+ * active-to-total ratio in the state's own 2022 per-precinct file is
+ * 0.9424, and 809,786 x 0.9424 is 763,113, which is the supplied figure
+ * to within half a percent. The per-cycle values are kept below as a
+ * fallback for any cycle the table does not reach.
  */
 const REGISTRATION = (() => {
   const file = path.join(ROOT, 'data', 'registration.json');
@@ -761,7 +761,7 @@ function buildCycle(cycle) {
   const reg = registrationFor(cycle);
   return {
     ...meta,
-    registeredVoters: cycle.registeredVoters ?? reg?.registered ?? null,
+    registeredVoters: reg?.registered ?? cycle.registeredVoters ?? null,
     /* Derived from the columns this cycle's report actually has, not
        assumed. A report cycle normally fills all four, but 2022's has no
        surrendered-ballot section and there is no reason for the page to
@@ -859,7 +859,7 @@ function buildLocalityCycle(cycle) {
   return {
     ...meta,
     reportDate: dataThrough,
-    registeredVoters: cycle.registeredVoters ?? reg?.registered ?? null,
+    registeredVoters: reg?.registered ?? cycle.registeredVoters ?? null,
     detail: { sites: false, returnRoute: false, ballotsIssued: false, surrendered: false },
     coverage: {
       ...cycle.coverage,
