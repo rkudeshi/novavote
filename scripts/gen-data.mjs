@@ -89,8 +89,28 @@ const CYCLES = [
     electionDate: '2023-11-07',
     reportDate: '2023-11-04',
     status: 'Final (county-labeled unofficial)',
-    coverage: { complete: true },
+    coverage: {
+      complete: true,
+      note:
+        'Vote-by-mail figures for this election are countywide totals, without the split between ballots returned by post and ballots returned to a drop box.',
+    },
     sourceFile: 'data/sources/fairfax-2023-11-final-ab-daily-report.xlsx',
+    /* The county's report is the authority for Fairfax — except here.
+       Its workbook reports 30,240 returned by mail and 6,533 by drop
+       box: 36,773 on 70,465 ballots issued, a 52% return rate against
+       73-84% in every other Fairfax cycle. The statewide daily file
+       reads 47,771, which is 68% and right in line, and that same file
+       lands on this cycle's in-person total *exactly* (64,382) and on
+       2024's and 2025's to within a rounding error. So the county figure
+       is short and the daily file is not, and vote-by-mail for this
+       cycle comes from the daily file.
+
+       The cost is real and is carried rather than hidden: the daily file
+       has no post-versus-drop-box split, so this cycle loses it. The
+       county's own figures are kept on the dataset as `superseded` and
+       the report's own totals are still asserted below, so the parse is
+       still checked even though its output is not used. */
+    mailFrom: 'daily',
     expect: {
       inPerson: 64382, returnedMail: 30240, returnedDropbox: 6533,
       ballotsMailed: 70465, abInPerson: 850,
@@ -638,6 +658,56 @@ function buildCycle(cycle) {
     }
   }
 
+  /* Vote-by-mail from the statewide daily file instead of this cycle's
+     own report. Only where a cycle asks for it, and only after its own
+     totals have been asserted above — the parse stays checked even when
+     its mail output is set aside. See the note on the 2023 cycle. */
+  let superseded = null;
+  if (cycle.mailFrom === 'daily') {
+    const year = cycle.electionDate.slice(0, 4);
+    const file = path.join(ROOT, 'data', 'parsed', `fairfax-${year}-general_dal_daily.csv`);
+    const dal = readCsv(file);
+    if (!dal?.length) {
+      throw new Error(`gen-data: ${cycle.id} asks for daily-file mail but ${file} is missing`);
+    }
+    superseded = {
+      returnedMail: totals.returnedMail,
+      returnedDropbox: totals.returnedDropbox,
+    };
+
+    const dalBy = Object.fromEntries(dal.map((r) => [r.date, num(r.mail_returned_daily)]));
+    for (const d of days) {
+      d.returnedMail = dalBy[d.date] ?? 0;
+      // The daily file does not record how a ballot came back.
+      d.returnedDropbox = null;
+    }
+    // Days the daily file has and the report does not.
+    for (const r of dal) {
+      if (days.some((d) => d.date === r.date)) continue;
+      days.push({
+        date: r.date,
+        weather: WEATHER[cycle.id]?.[r.date] ?? null,
+        inPerson: null,
+        sites: {},
+        returnedMail: num(r.mail_returned_daily),
+        returnedDropbox: null,
+        ballotsMailed: null,
+        abInPerson: null,
+      });
+    }
+    days.sort((a, b) => a.date.localeCompare(b.date));
+
+    totals.returnedMail = num(dal[dal.length - 1].mail_returned_cumulative);
+    totals.returnedDropbox = null;
+    const summed = days.reduce((acc, d) => acc + (d.returnedMail || 0), 0);
+    if (summed !== totals.returnedMail) {
+      throw new Error(
+        `gen-data: ${cycle.id} substituted mail sums to ${summed} but the daily ` +
+          `file's running total ends at ${totals.returnedMail}`,
+      );
+    }
+  }
+
   const sites = siteKeys.map((k) => {
     const total = early.reduce((s, r) => s + (siteValue(r, k) || 0), 0);
     const openRow = early.find((r) => siteValue(r, k) !== null);
@@ -712,7 +782,25 @@ function buildCycle(cycle) {
     };
   };
 
-  const tables = TABLE_SPECS.map(sourceTable).filter(Boolean);
+  const tables = TABLE_SPECS
+    // A superseded section is left out rather than shown contradicting
+    // the figures above it.
+    .filter((spec) => !(superseded && (spec.key === 'mail' || spec.key === 'dropbox')))
+    .map(sourceTable)
+    .filter(Boolean);
+
+  if (superseded) {
+    const mailDays = days.filter((d) => d.returnedMail != null);
+    tables.push({
+      key: 'mail',
+      label: 'Returned by mail',
+      hue: [235, 104, 52],
+      columns: [{ key: 'total', label: 'Total returned', detail: false }],
+      rows: mailDays.map((d) => ({ date: d.date, values: { total: d.returnedMail } })),
+      totals: { total: totals.returnedMail },
+      note: 'Vote-by-mail is a countywide daily total for this election, without the split between ballots returned by post and to a drop box.',
+    });
+  }
 
   // Turnout by site is the one table whose columns are the cycle's own
   // site roster rather than a fixed list.
@@ -762,9 +850,14 @@ function buildCycle(cycle) {
     detail: {
       ...FULL_DETAIL,
       sites: sites.length > 0,
+      returnRoute: totals.returnedDropbox != null,
       ballotsIssued: totals.ballotsMailed > 0,
       surrendered: abTotalCol != null,
     },
+    /* What this cycle's own report said, where the site shows something
+       else. Kept so the divergence stays on the record rather than being
+       quietly replaced. */
+    ...(superseded ? { superseded } : {}),
     coverage: { ...cycle.coverage, dataThrough, daysBeforeElection },
     totals,
     sites,
@@ -949,7 +1042,10 @@ function checkLocalityMethod(reportCycles) {
     const gotInPerson = num(last.early_in_person_cumulative);
     const gotMail = num(last.mail_returned_cumulative);
     const wantInPerson = ds.totals.inPerson;
-    const wantMail = ds.totals.returnedMail + ds.totals.returnedDropbox;
+    const county = ds.superseded;
+    const wantMail = county
+      ? county.returnedMail + county.returnedDropbox
+      : ds.totals.returnedMail + (ds.totals.returnedDropbox || 0);
 
     const offInPerson = Math.abs(gotInPerson - wantInPerson) / wantInPerson;
     if (offInPerson > IN_PERSON_TOLERANCE) {
@@ -965,7 +1061,8 @@ function checkLocalityMethod(reportCycles) {
       `  cross-check ${year}  in person ${String(gotInPerson).padStart(7)} vs ` +
         `${String(wantInPerson).padStart(7)} (${(offInPerson * 100).toFixed(2)}%)   ` +
         `by mail ${String(gotMail).padStart(7)} vs ${String(wantMail).padStart(7)} ` +
-        `(${(offMail * 100).toFixed(2)}%)${offMail > 0.05 ? '  <-- unexplained' : ''}`,
+        `(${(offMail * 100).toFixed(2)}%)` +
+        `${county ? '  <-- county figure superseded; the site shows the daily file' : ''}`,
     );
   }
 

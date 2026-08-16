@@ -142,9 +142,26 @@ an in-progress 2026 cycle will use while daily pulls are running.
 
 ## Two levels of data, and why
 
-**For Fairfax, the county's own report is the authority.** The state's
-daily file also carries Fairfax; it is used to *check* and augment, never
-to replace a county figure. Every other Northern Virginia locality is
+**For Fairfax, the county's own report is the authority — with one
+documented exception.** The state's daily file also carries Fairfax and
+is normally used to *check* and augment. It overrides a county figure
+only where the discrepancy is large **and** there is contextual evidence
+that the county figure is the wrong one; `mailFrom: 'daily'` on a cycle
+is how that is expressed, and Fairfax 2023 vote-by-mail is the only
+instance. The county's own figures stay on the dataset as `superseded`,
+its report's totals are still asserted (so the parse stays checked), and
+the divergence still prints on every build.
+
+**Fairfax 2023 vote-by-mail comes from the daily file.** The workbook
+reports 30,240 by mail and 6,533 by drop box — 36,773 on 70,465 issued,
+a **52% return rate against 73-84% in every other Fairfax cycle**. The
+daily file reads 47,771, which is 68% and in line, and that same file
+lands on 2023's in-person total *exactly* (64,382) and on 2024's and
+2025's to within a rounding error. The cost is carried rather than
+hidden: the daily file has no post-versus-drop-box split, so this cycle
+loses it (`detail.returnRoute: false`), the report's two superseded
+tables are dropped from the tabbed view rather than shown contradicting
+the headline, and the page says so. Every other Northern Virginia locality is
 built from that daily file,
 which carries two cumulative counts — early ballots cast in person, and
 mail ballots returned — and nothing else. That is the **locality baseline
@@ -170,13 +187,7 @@ and prints both series for every cycle that has both:
   137,221. 2024: 239,315 vs 239,326. 2023: 64,382 vs 64,382, exactly.
   Don't remove it — 24 locality datasets rest on it.
 - **Mail is reported, not asserted.** 2025 is 0.83% apart and 2024 is
-  0.03%, but 2023 is **30% apart** — 47,771 against the county's 36,773 — and the divergence
-  is not obviously the daily file's fault. 36,773 returned on 70,465
-  issued is a 52% return rate, against 73-84% in every other Fairfax
-  cycle; the daily file would put 2023 at 68%, right in line. Something
-  looks short in the 2023 workbook's own mail total. **Open question.**
-  Until it is run down the county's figure stands (per the rule above)
-  and the gap prints on every build.
+  0.03%. **2023 is 30% apart and the daily file wins there** — see below.
 
 Two properties of that file are real, not artefacts, and both are handled
 in `parse_dal.py`:
