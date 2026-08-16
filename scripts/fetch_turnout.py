@@ -63,10 +63,16 @@ ELECTIONS = {
 SUM_COLUMNS = {
     "registered": ["active registered voters", "activeregisteredvoters"],
     "registeredTotal": ["total registered voters", "totalregisteredvoters"],
-    "ballotsCast": ["total vote turnout", "totalvoteturnout"],
-    "absentee": ["absentee ballots", "absentee_ballots"],
-    "inPerson": ["in person ballots", "in_person_ballots"],
 }
+
+# Deliberately NOT read: TotalVoteTurnout, absentee_ballots,
+# in_person_ballots. Summed by locality they do not describe ballots —
+# Fairfax 2020 comes out at 1,020,701 against 751,830 active voters, a
+# 136% turnout, and the county's real 2020 turnout was around 594,000.
+# Whatever those columns count, it is not one ballot per row, and a
+# figure that cannot be reconciled does not belong on the site. The
+# registration columns pass the county cross-check in two separate
+# cycles, so they are kept and those are not.
 
 # The nine jurisdictions in scope. Keyed by the name this project uses;
 # the state writes cities without the word "City", so both spellings are
@@ -197,8 +203,8 @@ def read_election(filename):
             continue
         out[want] = acc
         print(f"   {want:<24} {precincts.get(key, 0):>4} precincts  "
-              f"registered {acc['registered']:>9,}  "
-              f"cast {acc.get('ballotsCast', 0):>9,}")
+              f"active {acc['registered']:>9,}  "
+              f"total {acc.get('registeredTotal', 0):>9,}")
     return out
 
 
@@ -209,16 +215,16 @@ def main():
     a = ap.parse_args()
 
     names = index()
-    print(f"directory lists {len(names)} turnout files; "
-          f"{sum(1 for n in names if re.search(r'20(2[0-9])', n))} from the 2020s")
+    print(f"directory lists {len(names)} turnout files")
 
     doc = {}
+    resolved = {}
     for date, year in ELECTIONS.items():
         print(f"\n== {year} November general")
         filename = november_general(names, year)
+        resolved[year] = filename
         if not filename:
-            near = [n for n in names if str(year) in n][:6]
-            print(f"   not in the index (files mentioning {year}: {near})")
+            print("   not in the index")
             continue
         try:
             doc[date] = read_election(filename)
@@ -226,6 +232,17 @@ def main():
             print(f"   HTTP {e.code} {e.reason}")
         except Exception as e:                       # noqa: BLE001
             print(f"   failed: {type(e).__name__}: {e}")
+
+    # Printed last, and printed always: on a long CI log the tail is what
+    # gets read, and which years resolved is the first thing to know.
+    print("\n-- resolved files")
+    for year, filename in sorted(resolved.items(), reverse=True):
+        if filename:
+            print(f"   {year}  {filename}")
+        else:
+            near = sorted(n for n in names if str(year) in n)
+            print(f"   {year}  MISSING — index entries mentioning {year}: "
+                  f"{near[:8] if near else 'none'}")
 
     print("\n-- check against Fairfax's own reports")
     bad = []

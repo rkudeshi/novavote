@@ -391,6 +391,35 @@ const pick = (row, names) => {
 
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
+/**
+ * Registered-voter counts per locality per election.
+ *
+ * Written by scripts/fetch_turnout.py from the state's own per-election
+ * turnout files (CI, since the sandbox cannot reach that host). Share of
+ * the electorate is the measure that compares a county of 810,000 with a
+ * city of 10,000 on equal footing, and without this only Fairfax has a
+ * denominator.
+ *
+ * A cycle's own registeredVoters wins where it has one: that comes from
+ * the locality's own report, and swapping it for the state's figure
+ * would silently move a number already on the page. The two are asserted
+ * to agree in fetch_turnout.py, so the fallback is not a different kind
+ * of number — just a different publisher of the same one.
+ *
+ * Only the registration counts come from those files. Their turnout
+ * columns do not reconcile — summed by locality they put Fairfax 2020 at
+ * a 136% turnout — so nothing is taken from them. See the note in
+ * fetch_turnout.py.
+ */
+const REGISTRATION = (() => {
+  const file = path.join(ROOT, 'data', 'registration.json');
+  if (!existsSync(file)) return {};
+  return JSON.parse(readFileSync(file, 'utf8')).elections || {};
+})();
+
+const registrationFor = (cycle) =>
+  REGISTRATION[cycle.electionDate]?.[cycle.locality] || null;
+
 /* County-level daily weather, one observation per day at the county
    centroid (see scripts/fetch_weather.py). Attached per day so the UI can
    put it beside a turnout figure without a second lookup. */
@@ -697,8 +726,10 @@ function buildCycle(cycle) {
   }
 
   const { expect, dir, prefix, ...meta } = cycle;
+  const reg = registrationFor(cycle);
   return {
     ...meta,
+    registeredVoters: cycle.registeredVoters ?? reg?.registered ?? null,
     /* Derived from the columns this cycle's report actually has, not
        assumed. A report cycle normally fills all four, but 2022's has no
        surrendered-ballot section and there is no reason for the page to
@@ -792,8 +823,10 @@ function buildLocalityCycle(cycle) {
   const MS = 86400000;
 
   const { file, slug, ...meta } = cycle;
+  const reg = registrationFor(cycle);
   return {
     ...meta,
+    registeredVoters: cycle.registeredVoters ?? reg?.registered ?? null,
     detail: { sites: false, returnRoute: false, ballotsIssued: false, surrendered: false },
     coverage: {
       ...cycle.coverage,
@@ -1000,6 +1033,7 @@ for (const ds of built) {
       `${ds.totals.inPerson.toLocaleString().padStart(8)} in person, ` +
       `${vbm.toLocaleString().padStart(8)} by mail, ` +
       `${ds.detail.sites ? 'report' : 'baseline'}, ` +
+      `${ds.registeredVoters ? `${ds.registeredVoters.toLocaleString()} voters` : 'NO REGISTRATION'}, ` +
       `${ds.coverage.complete ? 'complete' : `PARTIAL through ${ds.coverage.dataThrough}`}`,
   );
 }
