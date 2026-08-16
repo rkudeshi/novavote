@@ -184,14 +184,40 @@ scrubber, the grid read-out and the full table. The fetch window must run
 *past* Election Day — reports carry post-election rows while late mail
 arrives (2023 has rows through 11/13).
 
+**Final reports are xlsx, daily reports are PDFs.** `scripts/parse_xlsx_report.py`
+handles the county's end-of-cycle workbooks (Nov 2020-2023, archived in
+`data/sources/`). Two layouts: 2021-2023 put one column per site, 2020
+splits every site into congressional-district sub-columns closed by a
+`Total`. Run `--all` to reparse every report with its expected totals,
+which live in the script.
+
+**Check a sheet against a *different* sheet.** The parser asserts each
+series against the workbook's Summary tab, not against the daily sheet's
+own total row. An early version matched `Early Voting Option` before
+`Early Voting` and reported the same wrong figure for three straight
+years while passing its own check, because both sides came from the same
+wrong sheet. `DECOYS` in that script exists for this.
+
 ## Known data problems
 
-**The 2023 and 2024 reports are mid-cycle snapshots, not final reports.**
+**2024 is a mid-cycle snapshot, not a final report.**
 The 2024 PDF's filename ("- 9.24") is literal: it stops 24 Sept 2024, five
 days into early voting, at 14,129 in-person ballots — a presidential cycle
-ends near 400k. The 2023 one stops 23 Oct, before any satellite site
-opened. Both are flagged `coverage.complete: false` and shown as partial.
-Finding the genuine end-of-cycle reports is open work.
+ends near 400k. It is flagged `coverage.complete: false` and shown as
+partial; the genuine end-of-cycle 2024 report is still open work.
+
+2023 *was* also a snapshot, from a PDF ending 23 Oct at 13,981 in-person
+ballots. The county's final xlsx has 64,382, so that cycle is now
+complete. The 2023 PDF parse is deliberately absent from
+`extract-report.yml` — leaving it in would overwrite the final data with
+the snapshot on every run.
+
+**2020 has no registered-voter count.** Its report carries no Active
+Voters line, so the cycle sets `registeredVoters: null` and drops out of
+share-of-electorate views rather than borrowing a neighbouring year's
+denominator. Its Summary also disagrees with its own daily sheets by 42
+(mail) and 125 (drop box) ballots the county never attributed to a
+congressional district; the daily series is authoritative here.
 
 **v1 metadata was wrong and has been removed.** It carried
 `totalBallotsCast: 201588` and `turnoutPct: 24.89`. 201,588 is *exactly*

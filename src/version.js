@@ -25,7 +25,7 @@
      3. merge. The deploy workflow rebuilds every archived entry.
 ------------------------------------------------------------------ */
 
-export const VERSION = '5.2';
+export const VERSION = '5.3';
 
 /* Archive slug: a bare major release drops its ".0", so 4.0 lives at
    /versions/v4/ and 4.1 at /versions/v4.1/. deploy.yml reads this same
@@ -34,8 +34,21 @@ export const slug = (v) => `v${String(v).replace(/\.0$/, '')}`;
 
 export const VERSIONS = [
   {
-    v: '5.2',
+    v: '5.3',
     commit: null,        // current — served at the site root
+    date: 'August 2026',
+    headline: 'Six years of Fairfax early voting',
+    notes: [
+      'Adds the November 2020, 2021, 2022 and 2023 general elections from the county\u2019s final reports.',
+      '2023 was previously a mid-cycle snapshot stopping at 13,981 in-person ballots; the final report has 64,382.',
+      'Six cycles now line up on the comparison charts, from the 2020 presidential surge to 2023.',
+      'Two sites that only ever appear in older cycles \u2014 Laurel Hill and Gerry Hyland \u2014 join the map.',
+      '2020 carries no registered-voter figure, so it sits out the share-of-electorate view rather than borrowing one.',
+    ],
+  },
+  {
+    v: '5.2',
+    commit: '0e10decb86395bd3567c2d1aa87071c492b15254',
     date: 'August 2026',
     headline: 'Motion, animated weather, and a mobile layout that fits',
     notes: [

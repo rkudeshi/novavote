@@ -195,8 +195,16 @@ const LOCATIONS = (() => {
 })();
 
 /* Elections are ordered by recency, not categorical, so they take steps
-   of one sequential ramp — newest darkest — rather than arbitrary hues. */
-const RECENCY_RAMP = ['#0d366b', '#2a78d6', '#5598e7', '#86b6ef', '#cde2fb'];
+   of one sequential ramp — newest darkest. The ramp stops short of very
+   pale blue: the oldest cycle still has to be a visible line on a white
+   chart, and #cde2fb was not. Cycles index into it proportionally rather
+   than one-per-stop, so a sixth and seventh cycle spread across the ramp
+   instead of clamping onto the last colour, which is how 2020 and 2021
+   ended up identical. */
+const RECENCY_RAMP = [
+  '#0d366b', '#12457f', '#1c5cab', '#2a78d6',
+  '#4a8ce0', '#6da8ea', '#8fbef1', '#a9cef5',
+];
 
 function readCsv(file) {
   if (!existsSync(file)) return null;
@@ -481,7 +489,14 @@ function checkCoords(datasets) {
 
 const built = CYCLES.map(buildCycle)
   .sort((a, b) => b.electionDate.localeCompare(a.electionDate))
-  .map((ds, i) => ({ ...ds, color: RECENCY_RAMP[Math.min(i, RECENCY_RAMP.length - 1)] }));
+  .map((ds, i, arr) => ({
+    ...ds,
+    color: RECENCY_RAMP[
+      arr.length <= 1
+        ? 0
+        : Math.round((i / (arr.length - 1)) * (RECENCY_RAMP.length - 1))
+    ],
+  }));
 
 checkCoords(built);
 
