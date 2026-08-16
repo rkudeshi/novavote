@@ -214,9 +214,15 @@ def parse(pdf_path, year):
 
 
 def verify(values, totals, col_order):
-    """Sum every daily column and compare to the report's own total row."""
+    """Sum every daily column and compare to the report's own total row.
+
+    Returns the failures as (section, key) as well as the printable
+    report, because *which* column failed decides what can still ship:
+    a report whose county-level totals all reconcile is usable even when
+    its per-site split does not.
+    """
     report = []
-    ok = True
+    failed = []
     for section in sorted(values):
         for key in col_order[section]:
             published = totals[section].get(key)
@@ -226,15 +232,16 @@ def verify(values, totals, col_order):
                 d[key] for d in values[section].values() if d.get(key) is not None
             )
             match = summed == published
-            ok = ok and match
+            if not match:
+                failed.append((section, key))
             report.append(
                 f"  {'OK ' if match else '!! '} {section:<14} {key:<24} "
                 f"sum={summed:>8,} published={published:>8,}"
             )
-    return ok, report
+    return failed, report
 
 
-def write_csvs(values, totals, col_order, outdir, cycle):
+def write_csvs(values, totals, col_order, outdir, cycle, sites=True):
     outdir.mkdir(parents=True, exist_ok=True)
     written = []
 
@@ -269,8 +276,13 @@ def write_csvs(values, totals, col_order, outdir, cycle):
 
     # Early in person: every column except "total" is a site, discovered
     # from the report rather than hardcoded (the roster changes by cycle).
+    #
+    # `sites=False` writes the daily county total on its own. That is for
+    # the case where the total reconciles and the split does not: the
+    # county figure is verified and belongs on the site, the split is not
+    # and must not be published as though it were.
     if "early" in values:
-        site_keys = [k for k in col_order["early"] if k != "total"]
+        site_keys = [k for k in col_order["early"] if k != "total"] if sites else []
         path = outdir / f"{cycle}_early_in_person_by_site.csv"
         with path.open("w", newline="") as f:
             w = csv.writer(f)
@@ -280,13 +292,14 @@ def write_csvs(values, totals, col_order, outdir, cycle):
                 w.writerow([d, row.get("total", "")] + [row.get(k, "") for k in site_keys])
         written.append(path)
 
-        meta = outdir / f"{cycle}_site_totals.csv"
-        with meta.open("w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["site_key", "published_total"])
-            for k in site_keys:
-                w.writerow([k, totals["early"].get(k, "")])
-        written.append(meta)
+        if sites:
+            meta = outdir / f"{cycle}_site_totals.csv"
+            with meta.open("w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["site_key", "published_total"])
+                for k in site_keys:
+                    w.writerow([k, totals["early"].get(k, "")])
+            written.append(meta)
 
     return written
 
@@ -317,16 +330,40 @@ def main():
         for f in fixes:
             print(f"    - {f}")
 
-    ok, report = verify(values, totals, col_order)
+    failed, report = verify(values, totals, col_order)
     print("\n  reconciliation vs the report's own Total rows:")
     print("\n".join(report) or "    (no published totals found)")
 
-    written = write_csvs(values, totals, col_order, Path(args.outdir), args.cycle)
+    # A report whose county-level columns all reconcile is worth shipping
+    # even when its per-site split does not. The 2024 final report is
+    # exactly that case: 239,326 early ballots, 114,183 issued, 69,977
+    # returned by mail and 23,678 by drop box all land on the county's own
+    # printed totals, while seven site columns come up short because one
+    # page's text layer is scrambled. Publishing the verified county
+    # series and withholding the unverified split is better than
+    # withholding a whole cycle, and far better than shipping site figures
+    # that do not add up.
+    sites_only = bool(failed) and all(
+        section == "early" and key != "total" for section, key in failed
+    )
+    written = write_csvs(
+        values, totals, col_order, Path(args.outdir), args.cycle,
+        sites=not sites_only,
+    )
     print("\n  wrote:")
     for p in written:
         print(f"    {p}")
 
-    if not ok:
+    if sites_only:
+        print(
+            f"\n  PARTIAL: {len(failed)} site columns do not reconcile "
+            f"({', '.join(k for _, k in failed)}).\n"
+            f"  Every county-level column does, so the daily county totals are "
+            f"written and the\n  per-site split is withheld. Fix the site parse "
+            f"to restore it."
+        )
+        return
+    if failed:
         print("\n  RECONCILIATION FAILED — not trustworthy, do not ship these CSVs")
         sys.exit(2)
     print("\n  all columns reconcile")
