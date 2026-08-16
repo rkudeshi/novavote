@@ -29,17 +29,20 @@ jobs:
           python-version: '3.12'
       - name: Probe
         run: python scripts/probe_nova_sources.py --schedule ${{ github.event.inputs.urls }}
-      - name: Dump the state's turnout files
-        # Dump only. Once the column shapes are confirmed this moves to
-        # extract-report.yml with --write, which is the job that commits.
-        continue-on-error: true
-        run: python scripts/fetch_turnout.py
       - name: Probe registration statistics
         # Separate from the list above because it is after one specific
         # thing: a per-locality registered-voter count, which is the
         # denominator eight of nine jurisdictions are missing.
         continue-on-error: true
         run: python scripts/probe_registration.py
+      - name: Dump the state's turnout files
+        # Dump only. Once the column shapes are confirmed this moves to
+        # extract-report.yml with --write, which is the job that commits.
+        #
+        # Kept last on purpose: the steps above emit hundreds of harvested
+        # links, and reading this one's output means reading the tail.
+        continue-on-error: true
+        run: python scripts/fetch_turnout.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

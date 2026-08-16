@@ -335,7 +335,11 @@ export default function SourceTables({ ds }) {
 
         <div className="card tablewrap">
           {active
-            ? <SourceTable table={active} shade={shade} detail={detail} />
+            /* Keyed by table, so switching tabs resets the sort. Without
+               it the sort column carries over to a table that has no
+               such column, and the header shows no sort while the rows
+               sit in an order nothing on screen explains. */
+            ? <SourceTable key={active.key} table={active} shade={shade} detail={detail} />
             : <SummaryTable ds={ds} shade={shade} />}
         </div>
         {active?.note && <p className="note" style={{ marginTop: 12 }}>{active.note}</p>}
