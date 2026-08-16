@@ -21,11 +21,17 @@ const BLURB = {
 
 export default function Home() {
   const all = useMemo(() => byRecency(DATASETS), []);
-  const [view, setView] = useState('share');
+  const scopes = useMemo(() => buildScopes(all), [all]);
+  const [scope, setScope] = useState(scopes[0].key);
+  const [view, setView] = useState(scopes[0].metric);
 
+  const chosen = scopes.find((sc) => sc.key === scope) || scopes[0];
   const comparable = useMemo(
-    () => (view === 'electorateShare' ? all.filter((d) => d.registeredVoters) : all),
-    [all, view],
+    () =>
+      view === 'electorateShare'
+        ? chosen.datasets.filter((d) => d.registeredVoters)
+        : chosen.datasets,
+    [chosen, view],
   );
 
   return (
@@ -54,27 +60,100 @@ export default function Home() {
               ))}
             </div>
           </div>
+          {scopes.length > 1 && (
+            <div className="seg seg-scope" role="tablist" aria-label="Comparison scope">
+              {scopes.map((sc) => (
+                <button
+                  key={sc.key}
+                  role="tab"
+                  aria-selected={scope === sc.key}
+                  className={scope === sc.key ? 'is-on' : ''}
+                  onClick={() => { setScope(sc.key); setView(sc.metric); }}
+                >
+                  {sc.label}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="note" style={{ marginBottom: 22 }}>
-            {BLURB[view]} Every cycle is plotted by days before its own Election
-            Day, so different years line up.
+            {BLURB[view]} {chosen.blurb}
           </p>
 
           <div className="card chart-card">
-            <SurgeChart key={view} datasets={comparable} metric={view} height={400} />
+            <SurgeChart
+              key={`${scope}-${view}`}
+              datasets={comparable}
+              metric={view}
+              height={400}
+            />
           </div>
 
-          {view === 'electorateShare' && comparable.length < all.length && (
+          {view === 'electorateShare' && comparable.length < chosen.datasets.length && (
             <p className="note" style={{ marginTop: 14 }}>
-              {comparable.length} of {all.length} cycles shown — the rest have no
-              registered-voter count recorded.
+              {comparable.length} of {chosen.datasets.length} shown — the rest have
+              no registered-voter count recorded.
             </p>
           )}
         </div>
       </section>
 
-      <CycleGrid datasets={all} />
+      <CycleGrid scopes={scopes} />
     </>
   );
+}
+
+/* ------------------------------------------------------------------
+   The two comparisons the data supports, derived rather than listed.
+
+   One jurisdiction with many cycles asks "how does this year compare
+   with the last five?"; many jurisdictions in one cycle ask "who voted
+   early, and how?". They are different questions and putting all
+   fourteen curves on one chart answers neither, so the chart carries a
+   scope switch instead of a single merged set.
+
+   Within a single election the year on each label is noise, so those
+   series are relabelled to the bare place name.
+------------------------------------------------------------------ */
+function buildScopes(all) {
+  const out = [];
+
+  const perLocality = {};
+  all.forEach((d) => { (perLocality[d.locality] ||= []).push(d); });
+  const deepest = Object.values(perLocality)
+    .sort((a, b) => b.length - a.length)[0];
+
+  const latest = all.reduce(
+    (a, d) => (d.electionDate > a ? d.electionDate : a), all[0].electionDate);
+  const places = all.filter((d) => d.electionDate === latest);
+
+  if (places.length > 1) {
+    out.push({
+      key: 'places',
+      label: `${places.length} jurisdictions`,
+      /* Nine places in one election share the same arc almost exactly,
+         so a daily-share chart of them is nine copies of one curve.
+         Cumulative share is where they actually differ — who banks the
+         vote early and who leaves it to the last week. */
+      metric: 'cumulativeShare',
+      groupLabel: `${new Date(`${latest}T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}, across Northern Virginia`,
+      blurb: 'Each jurisdiction is plotted against its own Election Day.',
+      datasets: places.map((d) => ({ ...d, shortLabel: d.shortName })),
+    });
+  }
+  if (deepest.length > 1) {
+    const span = deepest.map((d) => d.electionDate.slice(0, 4)).sort();
+    out.push({
+      key: 'years',
+      label: `${deepest[0].shortName} by year`,
+      metric: 'share',
+      groupLabel: `${deepest[0].locality}, ${span[0]}\u2013${span[span.length - 1]}`,
+      blurb: 'Every cycle is plotted by days before its own Election Day, so different years line up.',
+      datasets: deepest,
+    });
+  }
+  return out.length
+    ? out
+    : [{ key: 'all', label: 'All', metric: 'share', blurb: '', datasets: all }];
 }
 
 function Hero() {
@@ -143,55 +222,80 @@ function Words({ text, start = 0 }) {
 /**
  * Key numbers across everything currently reporting.
  *
- * These are the facts that need no chart: how concentrated the vote was
- * at the end, when the single busiest day fell, how many mail ballots
- * actually came back, and how much in-person capacity was open.
+ * These are the facts that need no chart. Each one states the scope it
+ * covers rather than implying the region: not every jurisdiction records
+ * a registration count or a ballots-issued count, and a figure averaged
+ * over one place must not be labelled as if it came from nine.
  */
 function KeyNumbers() {
   const rows = JURISDICTIONS.filter((j) => j.total != null);
   if (!rows.length) return null;
 
+  const { turnout, turnoutVoters, turnoutCovers, reporting, inPersonShare } = NOV2025;
   const peak = rows.reduce((a, j) => (!a || j.peak.value > a.peak.value ? j : a), null);
   const closing = rows.filter((j) => j.closing7 != null);
   const mail = rows.filter((j) => j.mailReturn != null);
-  const sites = rows.reduce((s, j) => s + (j.sites || 0), 0);
 
-  const avg = (list, key) =>
-    list.reduce((s, j) => s + j[key], 0) / list.length;
+  const avg = (list, key) => list.reduce((s, j) => s + j[key], 0) / list.length;
+  /* Where the in-person habit is strongest and weakest. Both ends come
+     from the same measure, so the pair is a range rather than two
+     unrelated facts — and it is one of the few things every jurisdiction
+     here can be compared on. */
+  const ipShares = rows.map((j) => (j.inPerson / j.total) * 100).sort((a, b) => a - b);
+  const low = rows.find((j) => (j.inPerson / j.total) * 100 === ipShares[0]);
+  const high = rows.find(
+    (j) => (j.inPerson / j.total) * 100 === ipShares[ipShares.length - 1]);
+
+  /* "1 of 9 jurisdictions" is the whole point of the qualifier — drop it
+     once every reporting jurisdiction is in the figure. */
+  const scope = (n) => (n === reporting ? '' : ` \u00b7 ${n} of ${reporting} jurisdictions`);
 
   return (
     <section className="section" style={{ paddingTop: 0 }}>
       <div className="wrap">
         <div className="keys">
-          {NOV2025.turnout != null && (
+          {turnout != null && (
             <Key
-              v={pct(NOV2025.turnout)}
+              v={pct(turnout)}
               k="Voted early"
-              s={`of ${fmt(NOV2025.totals.registered)} registered voters`}
+              s={`of ${fmt(turnoutVoters)} registered voters${scope(turnoutCovers)}`}
+            />
+          )}
+          {inPersonShare != null && (
+            <Key
+              v={pct(inPersonShare)}
+              k="Cast in person"
+              s={`of ${fmt(NOV2025.totals.early)} early ballots`}
             />
           )}
           {closing.length > 0 && (
             <Key
               v={pct(avg(closing, 'closing7'))}
               k="Cast in the final week"
-              s="of the early vote"
+              s={`of the early vote${scope(closing.length)}`}
             />
           )}
           {peak && (
             <Key
               v={fmt(peak.peak.value)}
               k="Busiest single day"
-              s={longDate(peak.peak.date)}
+              s={`${peak.name}, ${longDate(peak.peak.date)}`}
+            />
+          )}
+          {ipShares.length > 1 && (
+            <Key
+              v={`${pct(ipShares[0], 0)}\u2013${pct(ipShares[ipShares.length - 1], 0)}`}
+              k="In-person share, low to high"
+              s={`${low.name} to ${high.name}`}
             />
           )}
           {mail.length > 0 && (
             <Key
               v={pct(avg(mail, 'mailReturn'))}
               k="Mail ballots returned"
-              s="of those issued"
+              s={`of those issued${scope(mail.length)}`}
             />
           )}
-          <Key v={String(sites)} k="In-person sites" s="open at some point" />
         </div>
       </div>
     </section>
@@ -232,7 +336,8 @@ function Jurisdictions() {
           November 2025 general election. Bar length is total early ballots;
           the split shows how they were cast. The last column is early ballots
           as a share of registered voters, which compares jurisdictions of
-          different sizes on equal footing.
+          different sizes on equal footing — shown where a registration count
+          is recorded.
         </p>
 
         <div className="jur">
@@ -292,18 +397,36 @@ function Jurisdictions() {
   );
 }
 
-function CycleGrid({ datasets }) {
+function CycleGrid({ scopes }) {
+  /* Cards are grouped by the same two scopes the chart offers, so a
+     reader who switched the chart to "by year" finds the same set below
+     it. A dataset in both groups is listed under the first — its own
+     jurisdiction's history is the more specific home for it. */
+  const seen = new Set();
+  const groups = [...scopes].reverse().map((sc) => {
+    const items = sc.datasets.filter((d) => !seen.has(d.id));
+    items.forEach((d) => seen.add(d.id));
+    return { ...sc, items };
+  }).filter((g) => g.items.length);
+
   return (
     <section className="section">
       <div className="wrap">
         <h2 className="h2" style={{ marginBottom: 22 }}>
           Elections with daily data
         </h2>
-        <div className="cycle-grid">
-          {datasets.map((ds, i) => (
-            <CycleCard key={ds.id} ds={ds} delay={i * 70} />
-          ))}
-        </div>
+        {groups.map((g, gi) => (
+          <div key={g.key} style={{ marginTop: gi ? 40 : 0 }}>
+            {groups.length > 1 && (
+              <h3 className="grid-group">{g.groupLabel || g.label}</h3>
+            )}
+            <div className="cycle-grid">
+              {g.items.map((ds, i) => (
+                <CycleCard key={ds.id} ds={ds} delay={i * 70} />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -341,8 +464,14 @@ function CycleCard({ ds, delay }) {
           <dd>{pct((m.inPerson / m.early) * 100)}</dd>
         </div>
         <div>
-          <dt>{s.complete ? 'Sites' : 'Through'}</dt>
-          <dd>{s.complete ? ds.sites.length : shortDate(ds.coverage.dataThrough)}</dd>
+          <dt>{!s.complete ? 'Through' : ds.detail.sites ? 'Sites' : 'Busiest day'}</dt>
+          <dd>
+            {!s.complete
+              ? shortDate(ds.coverage.dataThrough)
+              : ds.detail.sites
+                ? ds.sites.length
+                : fmt(s.peak.value)}
+          </dd>
         </div>
       </dl>
       <span className="cycle-go">Explore →</span>

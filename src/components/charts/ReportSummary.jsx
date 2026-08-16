@@ -11,8 +11,8 @@
    grouping is structural: a voter chooses vote-by-mail, and the drop box
    versus the postal service is a delivery detail within that choice.
 ------------------------------------------------------------------ */
-import { fmt, pct } from '../../lib/format.js';
-import { isComplete, methodTotals } from '../../lib/derive.js';
+import { fmt, longDate, pct } from '../../lib/format.js';
+import { isComplete, methodTotals, peakDay } from '../../lib/derive.js';
 import { useCountUp, useInView, useWidth } from '../../lib/motion.js';
 
 const NEUTRAL = 'var(--line-strong)';
@@ -162,9 +162,18 @@ export default function ReportSummary({ ds }) {
   const abIn = t.abInPerson || 0;
   const complete = isComplete(ds);
 
+  /* What the dataset can actually show. A baseline locality dataset has
+     the two group totals and nothing inside them: no split between the
+     post and the drop box, no count of ballots issued. Those sections
+     are omitted rather than drawn with zeros, which would read as
+     "nobody used a drop box" instead of "that isn't recorded here". */
+  const { returnRoute, ballotsIssued } = ds.detail;
+
   /* Ballots issued that never came back. Guarded at zero: on a snapshot
      the mailed and returned series can stop on different dates. */
-  const unreturned = Math.max(0, t.ballotsMailed - m.vbm - abIn);
+  const unreturned = ballotsIssued
+    ? Math.max(0, t.ballotsMailed - m.vbm - abIn)
+    : null;
 
   return (
     <div className="rs">
@@ -190,13 +199,23 @@ export default function ReportSummary({ ds }) {
           of={`of ${fmt(m.early)} early ballots`}
           accent="var(--s2)"
         />
-        <Stat
-          label="Mail ballots returned"
-          share={t.ballotsMailed ? (m.vbm / t.ballotsMailed) * 100 : null}
-          value={m.vbm}
-          of={`of ${fmt(t.ballotsMailed)} issued by mail`}
-          accent={NEUTRAL}
-        />
+        {ballotsIssued ? (
+          <Stat
+            label="Mail ballots returned"
+            share={(m.vbm / t.ballotsMailed) * 100}
+            value={m.vbm}
+            of={`of ${fmt(t.ballotsMailed)} issued by mail`}
+            accent={NEUTRAL}
+          />
+        ) : (
+          <Stat
+            label="Busiest day"
+            share={null}
+            value={peak(ds).value}
+            of={`ballots on ${peak(ds).label}`}
+            accent={NEUTRAL}
+          />
+        )}
       </div>
 
       <Bar
@@ -211,35 +230,49 @@ export default function ReportSummary({ ds }) {
           {
             key: 'vbm', label: 'Vote by mail', value: m.vbm,
             color: 'var(--s2)', dark: true,
-            sub: [
-              { key: 'mail', label: 'By mail', value: t.returnedMail, color: 'var(--s2)', dark: true },
-              { key: 'box', label: 'Drop box', value: t.returnedDropbox, color: 'var(--s3)' },
-            ],
+            ...(returnRoute
+              ? {
+                  sub: [
+                    { key: 'mail', label: 'By mail', value: t.returnedMail, color: 'var(--s2)', dark: true },
+                    { key: 'box', label: 'Drop box', value: t.returnedDropbox, color: 'var(--s3)' },
+                  ],
+                }
+              : {}),
           },
         ]}
       />
 
-      <Bar
-        title="What became of the ballots issued by mail"
-        total={t.ballotsMailed}
-        totalLabel="ballots issued"
-        parts={[
-          { key: 'mail', label: 'Returned by mail', value: t.returnedMail, color: 'var(--s2)', dark: true },
-          { key: 'box', label: 'Returned by drop box', value: t.returnedDropbox, color: 'var(--s3)' },
-          { key: 'ip', label: 'Voted in person instead', value: abIn, color: 'var(--seq-250)' },
-          {
-            key: 'none',
-            label: complete ? 'Never returned' : 'Not returned yet',
-            value: unreturned,
-            color: NEUTRAL,
-          },
-        ]}
-        note={complete
-          ? `${fmt(unreturned)} ballots were issued and never came back${
-              t.undeliverable != null ? `, of which ${fmt(t.undeliverable)} were undeliverable` : ''
-            }.`
-          : 'Coverage stops before Election Day, so most mail ballots were still outstanding.'}
-      />
+      {ballotsIssued && (
+        <Bar
+          title="What became of the ballots issued by mail"
+          total={t.ballotsMailed}
+          totalLabel="ballots issued"
+          parts={[
+            { key: 'mail', label: 'Returned by mail', value: t.returnedMail, color: 'var(--s2)', dark: true },
+            { key: 'box', label: 'Returned by drop box', value: t.returnedDropbox, color: 'var(--s3)' },
+            { key: 'ip', label: 'Voted in person instead', value: abIn, color: 'var(--seq-250)' },
+            {
+              key: 'none',
+              label: complete ? 'Never returned' : 'Not returned yet',
+              value: unreturned,
+              color: NEUTRAL,
+            },
+          ]}
+          note={complete
+            ? `${fmt(unreturned)} ballots were issued and never came back${
+                t.undeliverable != null ? `, of which ${fmt(t.undeliverable)} were undeliverable` : ''
+              }.`
+            : 'Coverage stops before Election Day, so most mail ballots were still outstanding.'}
+        />
+      )}
     </div>
   );
+}
+
+/* Stands in for the ballots-issued box where that figure doesn't exist.
+   The busiest day is the other fact a reader wants from a set of
+   headline numbers, and every dataset has it. */
+function peak(ds) {
+  const p = peakDay(ds);
+  return { value: p.value, label: longDate(p.date) };
 }

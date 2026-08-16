@@ -52,7 +52,7 @@ function ElectionIndex({ all }) {
         <h1 className="h1" style={{ marginBottom: 16 }}>Elections</h1>
         <p className="lede" style={{ marginBottom: 34 }}>
           Every locality-election NovaVote holds daily data for. Each one
-          reconciles against the totals published in its own source report.
+          reconciles against its own published totals.
         </p>
         <div className="el-list">
           {all.map((ds) => {
@@ -76,8 +76,10 @@ function ElectionIndex({ all }) {
                   <b>{pct(s.closing7)}</b>
                   <span>final week</span>
                 </span>
+                {/* A dataset with no site breakdown says so with a dash
+                    rather than "0 sites", which would be a claim. */}
                 <span className="el-stat">
-                  <b>{ds.sites.length}</b>
+                  <b>{ds.detail.sites ? ds.sites.length : '—'}</b>
                   <span>sites</span>
                 </span>
                 <span className="el-go">→</span>

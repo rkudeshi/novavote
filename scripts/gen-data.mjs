@@ -26,6 +26,7 @@ const CYCLES = [
     id: 'fairfax-2025-general',
     dir: 'data',                         // hand-validated, flat layout
     locality: 'Fairfax County',
+    shortName: 'Fairfax',
     shortLabel: 'Fairfax 2025',
     localityType: 'county',
     electionName: 'General & Special Elections',
@@ -53,6 +54,7 @@ const CYCLES = [
     dir: 'data/parsed',
     prefix: 'fairfax-2024-general_',
     locality: 'Fairfax County',
+    shortName: 'Fairfax',
     shortLabel: 'Fairfax 2024',
     localityType: 'county',
     electionName: 'General Election (presidential)',
@@ -72,6 +74,7 @@ const CYCLES = [
     dir: 'data/parsed',
     prefix: 'fairfax-2023-general_',
     locality: 'Fairfax County',
+    shortName: 'Fairfax',
     shortLabel: 'Fairfax 2023',
     localityType: 'county',
     electionName: 'General & Special Elections',
@@ -91,6 +94,7 @@ const CYCLES = [
     dir: 'data/parsed',
     prefix: 'fairfax-2022-general_',
     locality: 'Fairfax County',
+    shortName: 'Fairfax',
     shortLabel: 'Fairfax 2022',
     localityType: 'county',
     electionName: 'General Election',
@@ -110,6 +114,7 @@ const CYCLES = [
     dir: 'data/parsed',
     prefix: 'fairfax-2021-general_',
     locality: 'Fairfax County',
+    shortName: 'Fairfax',
     shortLabel: 'Fairfax 2021',
     localityType: 'county',
     electionName: 'General Election (governor)',
@@ -129,6 +134,7 @@ const CYCLES = [
     dir: 'data/parsed',
     prefix: 'fairfax-2020-general_',
     locality: 'Fairfax County',
+    shortName: 'Fairfax',
     shortLabel: 'Fairfax 2020',
     localityType: 'county',
     electionName: 'General Election (presidential)',
@@ -151,6 +157,81 @@ const CYCLES = [
     },
   },
 ];
+
+/* ------------------------------------------------------------------
+   Locality baseline cycles.
+
+   Fairfax publishes a daily operational report; no other Northern
+   Virginia locality does. What every locality has is the state's daily
+   absentee file, which carries two cumulative counts — early ballots
+   cast in person, and mail ballots returned — and nothing else.
+   scripts/parse_dal.py differences those daily snapshots into a per-day
+   series; this builds the same dataset shape from it.
+
+   This is the template every non-Fairfax jurisdiction uses, and the
+   floor Fairfax sits above rather than a different kind of thing. The
+   fields that genuinely do not exist here are carried as **null, never
+   zero**: there is no site breakdown, no mail-versus-drop-box split, no
+   daily ballots-issued count, and no surrendered-ballot count. `detail`
+   is what the UI reads — a section that needs one of those checks the
+   flag rather than inferring absence from a zero, which would otherwise
+   render as "0 ballots returned by drop box".
+
+   Two things about this series differ from a county report and both are
+   real, not artefacts:
+
+     * In-person moves on the day a ballot is cast, so that curve is
+       activity. Mail moves when a ballot is *processed*, which mostly
+       happens after Election Day — so mail keeps climbing for a week
+       past the election. Those days are kept (a mail ballot returned
+       before Election Day is an early ballot whenever it gets scanned)
+       and the report cycles already do the same thing.
+     * A daily figure can be negative where a record's status was
+       corrected. Those are preserved rather than clamped, because
+       zeroing them would silently inflate the running total.
+
+   Fairfax appears in the same file, which is what makes this method
+   checkable rather than merely plausible — see checkLocalityMethod().
+------------------------------------------------------------------ */
+const NOV2025 = {
+  electionName: 'General Election',
+  electionDate: '2025-11-04',
+  reportDate: '2025-11-09',
+  // Not the locality's own report. Every other cycle's status names what
+  // kind of document it came from; this names what kind of figure it is.
+  status: 'Unofficial daily totals',
+  coverage: { complete: true },
+  /* Registration counts for these localities are not in this data and
+     have not been sourced yet, so each carries null and drops out of
+     share-of-electorate views rather than borrowing a figure. */
+  registeredVoters: null,
+};
+
+const LOCALITY_CYCLES = [
+  { slug: 'loudoun', locality: 'Loudoun County', shortName: 'Loudoun', localityType: 'county' },
+  { slug: 'prince-william', locality: 'Prince William County', shortName: 'Prince William', localityType: 'county' },
+  { slug: 'arlington', locality: 'Arlington County', shortName: 'Arlington', localityType: 'county' },
+  { slug: 'alexandria', locality: 'Alexandria City', shortName: 'Alexandria', localityType: 'city' },
+  { slug: 'fairfax-city', locality: 'Fairfax City', shortName: 'Fairfax City', localityType: 'city' },
+  { slug: 'falls-church', locality: 'Falls Church City', shortName: 'Falls Church', localityType: 'city' },
+  { slug: 'manassas', locality: 'Manassas City', shortName: 'Manassas', localityType: 'city' },
+  { slug: 'manassas-park', locality: 'Manassas Park City', shortName: 'Manassas Park', localityType: 'city' },
+].map((j) => ({
+  ...NOV2025,
+  ...j,
+  id: `${j.slug}-2025-general`,
+  shortLabel: `${j.shortName} 2025`,
+  file: `data/parsed/${j.slug}-2025-general_dal_daily.csv`,
+}));
+
+/* What a dataset actually contains. Every consumer that needs more than
+   two daily counts asks here first. Report cycles fill these in from the
+   columns their CSVs really have, so a cycle whose report omits a
+   section (2023 has no undeliverable column) still describes itself
+   correctly. */
+const FULL_DETAIL = {
+  sites: true, returnRoute: true, ballotsIssued: true, surrendered: true,
+};
 
 /* Sites that changed name between cycles but are the same physical
    location. Mapping the old key onto the current one is what lets a
@@ -478,6 +559,16 @@ function buildCycle(cycle) {
   const { expect, dir, prefix, ...meta } = cycle;
   return {
     ...meta,
+    /* Derived from the columns this cycle's report actually has, not
+       assumed. A report cycle normally fills all four, but 2022's has no
+       surrendered-ballot section and there is no reason for the page to
+       print a zero for it. */
+    detail: {
+      ...FULL_DETAIL,
+      sites: sites.length > 0,
+      ballotsIssued: totals.ballotsMailed > 0,
+      surrendered: abTotalCol != null,
+    },
     coverage: { ...cycle.coverage, dataThrough, daysBeforeElection },
     totals,
     sites,
@@ -485,6 +576,147 @@ function buildCycle(cycle) {
     hours,
     schedule,
   };
+}
+
+/**
+ * Build a locality baseline cycle from a differenced daily-absentee file.
+ *
+ * Same dataset shape as a report cycle, with the four things this source
+ * cannot know carried as null. See the LOCALITY_CYCLES comment above.
+ */
+function buildLocalityCycle(cycle) {
+  const rows = readCsv(path.join(ROOT, cycle.file));
+  if (!rows) {
+    throw new Error(
+      `gen-data: no daily file for ${cycle.id} (${cycle.file}). ` +
+        `Run scripts/parse_dal.py to regenerate it.`,
+    );
+  }
+
+  /* Trim the flat tail. The source keeps emitting snapshots for days
+     after the last ballot moves; carrying them would put a week of empty
+     rows on the end of every table. Everything up to and including the
+     last day something happened is kept, zero-days in the middle
+     included — a quiet Sunday is a fact about the cycle. */
+  const active = rows.map((r, i) => [i, Number(r.combined_daily) || 0]);
+  let lastActive = -1;
+  for (const [i, v] of active) if (v !== 0) lastActive = i;
+  if (lastActive < 0) throw new Error(`gen-data: ${cycle.id} has no activity in its daily file`);
+  const kept = rows.slice(0, lastActive + 1);
+
+  const days = kept.map((r) => ({
+    date: r.date,
+    weather: null,
+    inPerson: num(r.early_in_person_daily),
+    sites: {},
+    returnedMail: num(r.mail_returned_daily),
+    // Null, not zero: the return route is unknown here, and a zero would
+    // render as "nobody used a drop box".
+    returnedDropbox: null,
+    ballotsMailed: null,
+    abInPerson: null,
+    /* A negative day is a status correction upstream, not a day ballots
+       were withdrawn. Flagged so a reader can see one happened. */
+    correction: r.is_correction === 'true',
+    phase: r.phase,
+  }));
+
+  const last = kept[kept.length - 1];
+  const totals = {
+    // Cumulative from the source rather than a sum of the deltas: the two
+    // agree, and taking the published cumulative means a dropped snapshot
+    // can never quietly shrink the total.
+    inPerson: num(last.early_in_person_cumulative),
+    returnedMail: num(last.mail_returned_cumulative),
+    returnedDropbox: null,
+    ballotsMailed: null,
+    abInPerson: null,
+    undeliverable: null,
+  };
+
+  const sumOf = (col) => kept.reduce((s, r) => s + (num(r[col]) || 0), 0);
+  for (const [total, col] of [
+    [totals.inPerson, 'early_in_person_daily'],
+    [totals.returnedMail, 'mail_returned_daily'],
+  ]) {
+    if (total !== sumOf(col)) {
+      throw new Error(
+        `gen-data: ${cycle.id} ${col} sums to ${sumOf(col)} but the file's ` +
+          `running total ends at ${total}`,
+      );
+    }
+  }
+
+  const dataThrough = days[days.length - 1].date;
+  const MS = 86400000;
+
+  const { file, slug, ...meta } = cycle;
+  return {
+    ...meta,
+    detail: { sites: false, returnRoute: false, ballotsIssued: false, surrendered: false },
+    coverage: {
+      ...cycle.coverage,
+      dataThrough,
+      daysBeforeElection: Math.round(
+        (new Date(cycle.electionDate) - new Date(dataThrough)) / MS,
+      ),
+      /* Shown on the page. It explains a shape the reader can see —
+         mail still arriving after Election Day — rather than commenting
+         on it. */
+      note: 'Mail ballots are counted as they are processed, which continues for several days after Election Day.',
+    },
+    totals,
+    sites: [],
+    days,
+    hours: null,
+    schedule: null,
+  };
+}
+
+/**
+ * Check the locality method against the one place the answer is known.
+ *
+ * Fairfax is in the same daily file as everyone else *and* publishes its
+ * own report, so the two can be compared directly. That comparison is
+ * the entire warrant for showing eight other localities built the same
+ * way, and it has to keep holding — if a future import drifts, this is
+ * what catches it before the figures ship.
+ *
+ * The tolerances are wide because the two are not the same measurement:
+ * the county counts ballots, the daily file counts approved records, and
+ * a late status correction moves one without the other.
+ */
+function checkLocalityMethod(reportCycles) {
+  const file = path.join(ROOT, 'data', 'parsed', 'fairfax-2025-general_dal_daily.csv');
+  const rows = readCsv(file);
+  const ds = reportCycles.find((d) => d.id === 'fairfax-2025-general');
+  if (!rows || !ds) {
+    console.warn('gen-data: no Fairfax daily file to check the locality method against');
+    return;
+  }
+  const last = rows[rows.length - 1];
+  const checks = [
+    ['early in person', num(last.early_in_person_cumulative), ds.totals.inPerson, 0.005],
+    ['returned by mail',
+      num(last.mail_returned_cumulative),
+      ds.totals.returnedMail + ds.totals.returnedDropbox,
+      0.02],
+  ];
+  for (const [what, got, want, tol] of checks) {
+    const off = Math.abs(got - want) / want;
+    if (off > tol) {
+      throw new Error(
+        `gen-data: the locality method is off by ${(off * 100).toFixed(1)}% on ` +
+          `Fairfax ${what} (${got.toLocaleString()} vs the county's ` +
+          `${want.toLocaleString()}). Eight localities are built this way, so ` +
+          `this has to hold before any of them ship.`,
+      );
+    }
+    console.log(
+      `  cross-check  Fairfax ${what.padEnd(16)} ${String(got).padStart(7)} vs ` +
+        `${String(want).padStart(7)} published — ${(off * 100).toFixed(2)}% apart`,
+    );
+  }
 }
 
 /* Site coordinates are hand-stubbed and still awaiting real geocoding.
@@ -529,16 +761,41 @@ function checkCoords(datasets) {
   }
 }
 
-const built = CYCLES.map(buildCycle)
-  .sort((a, b) => b.electionDate.localeCompare(a.electionDate))
-  .map((ds, i, arr) => ({
+/* Step a ramp across a list, first item darkest. Proportional rather
+   than one-per-stop so a longer list spreads across the whole ramp
+   instead of clamping several entries onto the last colour. */
+const stepRamp = (arr, ramp) =>
+  arr.map((ds, i) => ({
     ...ds,
-    color: RECENCY_RAMP[
-      arr.length <= 1
-        ? 0
-        : Math.round((i / (arr.length - 1)) * (RECENCY_RAMP.length - 1))
+    color: ramp[
+      arr.length <= 1 ? 0 : Math.round((i / (arr.length - 1)) * (ramp.length - 1))
     ],
   }));
+
+const reports = stepRamp(
+  CYCLES.map(buildCycle).sort((a, b) => b.electionDate.localeCompare(a.electionDate)),
+  RECENCY_RAMP,
+);
+
+checkLocalityMethod(reports);
+
+/* Locality cycles all share one election date, so recency says nothing
+   about them. They step the same ramp by size instead — largest darkest
+   — which is how the treemap and the jurisdiction bars already order a
+   set of places.
+
+   The darkest stop is held back rather than reused: Fairfax is both the
+   most recent cycle and the largest jurisdiction, so it already owns
+   that colour, and handing it to Prince William as well would put two
+   identical lines on the one chart that shows all nine at once. */
+const localities = stepRamp(
+  LOCALITY_CYCLES.map(buildLocalityCycle)
+    .sort((a, b) => (b.totals.inPerson + b.totals.returnedMail)
+      - (a.totals.inPerson + a.totals.returnedMail)),
+  RECENCY_RAMP.slice(1),
+);
+
+const built = [...reports, ...localities];
 
 checkCoords(built);
 
@@ -561,10 +818,13 @@ writeFileSync(
 
 console.log('gen-data:');
 for (const ds of built) {
+  const vbm = (ds.totals.returnedMail || 0) + (ds.totals.returnedDropbox || 0);
   console.log(
-    `  ${ds.id.padEnd(24)} ${String(ds.sites.length).padStart(2)} sites, ` +
+    `  ${ds.id.padEnd(26)} ${String(ds.sites.length).padStart(2)} sites, ` +
       `${String(ds.days.length).padStart(2)} days, ` +
       `${ds.totals.inPerson.toLocaleString().padStart(8)} in person, ` +
+      `${vbm.toLocaleString().padStart(8)} by mail, ` +
+      `${ds.detail.sites ? 'report' : 'baseline'}, ` +
       `${ds.coverage.complete ? 'complete' : `PARTIAL through ${ds.coverage.dataThrough}`}`,
   );
 }

@@ -57,6 +57,12 @@ export default function SurgeChart({
     [datasets],
   );
 
+  /* The gradient under a curve reads as volume when there are a few of
+     them. Past that it is nine translucent washes stacked on each other
+     and the lines disappear into the mud — so beyond four series the
+     fills come off and the chart is lines only. */
+  const filled = series.length <= 4;
+
   const maxOut = Math.max(...series.flatMap((s) => s.rows.map((r) => r.daysOut)), 1);
   const maxVal = niceMax(
     Math.max(...series.flatMap((s) => s.rows.map((r) => r[metric])), 0.001),
@@ -67,6 +73,76 @@ export default function SurgeChart({
   // Election Day sits at the right edge, so days-out runs high -> low.
   const x = linear(maxOut, 0, PAD.left, PAD.left + innerW);
   const y = linear(0, maxVal, PAD.top + innerH, PAD.top);
+
+  /* ----------------------------------------------------------------
+     Direct-label placement.
+
+     Anchoring every label at its curve's end point works for two or
+     three series and fails badly for nine: the last point is Election
+     Day, where daily share collapses to near zero for everyone, so all
+     nine labels land in the same corner on top of each other.
+
+     So the anchor is the x position where the series are *furthest
+     apart* — the one column of the chart where every curve has room for
+     its own label. With few series that is usually the end anyway; with
+     many it is the peak, which is also the most legible place to be
+     told which line is which. A two-pass sweep (down, then back up off
+     the floor) resolves whatever overlap is left.
+  ---------------------------------------------------------------- */
+  /* Rendered width of a series label, near enough. IBM Plex Mono at
+     11.5px advances ~6.9px per character, and " (partial)" is ten more. */
+  const labelPx = (s) => (s.label.length + (s.partial ? 10 : 0)) * 6.9;
+
+  const anchor = (() => {
+    if (series.length <= 3) return null;         // end-of-line is fine
+    /* Labels are right-aligned to the anchor, so the anchor has to sit
+       far enough in from the left edge for the longest of them to fit.
+       Without this the widest-spread column is often the first day —
+       where a partial cycle's five-day snapshot spikes — and every
+       label runs off the side of the chart. */
+    const room = Math.max(...series.map(labelPx)) + 12;
+    let best = null;
+    for (let d = maxOut; d >= 0; d--) {
+      if (x(d) - PAD.left < room) continue;
+      const vals = series
+        .map((s) => s.rows.find((r) => r.daysOut === d)?.[metric])
+        .filter((v) => v != null);
+      if (vals.length < series.length) continue;
+      const spread = Math.max(...vals) - Math.min(...vals);
+      if (!best || spread > best.spread) best = { d, spread };
+    }
+    return best?.d ?? null;
+  })();
+
+  const labelAt = series.map((s) => {
+    const row = anchor != null
+      ? s.rows.find((r) => r.daysOut === anchor)
+      : s.rows[s.rows.length - 1];
+    if (!row) return null;
+    return { x: x(row.daysOut), y: y(row[metric]) };
+  });
+
+  const labelYs = (() => {
+    const GAP = 14;
+    const top = PAD.top + 12;
+    const bottom = PAD.top + innerH - 4;
+    const want = labelAt.map((a, i) => ({ i, y: a ? a.y - 10 : top }));
+    want.sort((a, b) => a.y - b.y);
+    for (let k = 1; k < want.length; k++) {
+      if (want[k].y - want[k - 1].y < GAP) want[k].y = want[k - 1].y + GAP;
+    }
+    // Back up off the floor, so a pile-up at the bottom spreads upward
+    // instead of collapsing onto the last row.
+    if (want.length && want[want.length - 1].y > bottom) {
+      want[want.length - 1].y = bottom;
+      for (let k = want.length - 2; k >= 0; k--) {
+        if (want[k + 1].y - want[k].y < GAP) want[k].y = want[k + 1].y - GAP;
+      }
+    }
+    const out = [];
+    want.forEach((o) => { out[o.i] = Math.max(top, o.y); });
+    return out;
+  })();
 
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => maxVal * f);
   const dayTicks = [maxOut, 28, 21, 14, 7, 3, 0].filter((d, i, a) => d <= maxOut && a.indexOf(d) === i);
@@ -118,7 +194,13 @@ export default function SurgeChart({
                 fontFamily="var(--font-mono)"
                 fill="var(--muted)"
               >
-                {metric === 'share' ? `${t.toFixed(t < 1 ? 1 : 0)}%` : fmt(Math.round(t))}
+                {/* Every metric here is a percentage; only the raw-count
+                    views are not, and there are none at present. Keying
+                    on `share` alone printed the cumulative axis as bare
+                    "100 / 75 / 50". */}
+                {metric.toLowerCase().includes('share')
+                  ? `${t.toFixed(t < 1 ? 1 : 0)}%`
+                  : fmt(Math.round(t))}
               </text>
             </g>
           ))}
@@ -158,16 +240,18 @@ export default function SurgeChart({
           } Z`;
           return (
             <g key={s.id}>
-              <path
-                d={area}
-                fill={`url(#fill-${s.id})`}
-                opacity={s.partial ? 0.45 : 1}
-              />
+              {filled && (
+                <path
+                  d={area}
+                  fill={`url(#fill-${s.id})`}
+                  opacity={s.partial ? 0.45 : 1}
+                />
+              )}
               <path
                 d={line}
                 fill="none"
                 stroke={s.color}
-                strokeWidth="2"
+                strokeWidth={filled ? 2 : 1.6}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={s.partial ? '5 4' : undefined}
@@ -184,16 +268,32 @@ export default function SurgeChart({
                 </circle>
               )}
               {/* Direct label — required relief for the aqua series, which
-                  sits under 3:1 contrast on this surface. */}
+                  sits under 3:1 contrast on this surface, and the only way
+                  to tell nine same-hue curves apart. Placement comes from
+                  labelYs, which pushes overlapping labels apart. */}
               {p >= 1 && (
                 <text
-                  x={Math.max(PAD.left + 4, last[0] - 6)}
-                  y={Math.max(PAD.top + 12, last[1] - 10 - si * 14)}
+                  /* Clamped by the label's own width, not by a token 4px:
+                     a series that ends before the shared anchor falls back
+                     to its own last point, which for a mid-cycle snapshot
+                     is near the left edge. */
+                  x={Math.max(
+                    PAD.left + labelPx(s) + 4,
+                    (labelAt[si]?.x ?? last[0]) - 6,
+                  )}
+                  y={labelYs[si]}
                   textAnchor="end"
                   fontSize="11.5"
                   fontWeight="600"
                   fontFamily="var(--font-mono)"
                   fill={s.color}
+                  /* A label sitting over the curves needs to clear them.
+                     Painting the stroke first puts a halo of the chart
+                     surface behind the glyphs rather than in front. */
+                  stroke="var(--surface)"
+                  strokeWidth="3.5"
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
                 >
                   {s.label}{s.partial ? ' (partial)' : ''}
                 </text>

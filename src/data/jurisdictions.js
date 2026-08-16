@@ -37,7 +37,7 @@ function fromDataset(id) {
        in these files — but it is the one measure that compares a county
        of 810,000 with a city of 10,000 on equal footing. */
     turnout: reg ? (m.early / reg) * 100 : null,
-    sites: ds.sites.length,
+    sites: ds.detail.sites ? ds.sites.length : null,
     peak: peakDay(ds),
     closing7: closingShare(ds, 7),
     mailReturn: ds.totals.ballotsMailed
@@ -46,14 +46,20 @@ function fromDataset(id) {
   };
 }
 
+/* Fairfax points at its own daily report; every other jurisdiction
+   points at the locality baseline built from the statewide daily file.
+   Both are reconciled datasets — see the locality-cycle notes in
+   scripts/gen-data.mjs — so both belong here. */
 const SCOPE = [
   { key: 'fairfax_county', name: 'Fairfax County', datasetId: 'fairfax-2025-general' },
-  { key: 'loudoun', name: 'Loudoun County' },
-  { key: 'prince_william', name: 'Prince William County' },
-  { key: 'arlington', name: 'Arlington County' },
-  { key: 'alexandria', name: 'Alexandria City' },
-  { key: 'fairfax_city', name: 'Fairfax City' },
-  { key: 'falls_church', name: 'Falls Church City' },
+  { key: 'loudoun', name: 'Loudoun County', datasetId: 'loudoun-2025-general' },
+  { key: 'prince_william', name: 'Prince William County', datasetId: 'prince-william-2025-general' },
+  { key: 'arlington', name: 'Arlington County', datasetId: 'arlington-2025-general' },
+  { key: 'alexandria', name: 'Alexandria City', datasetId: 'alexandria-2025-general' },
+  { key: 'fairfax_city', name: 'Fairfax City', datasetId: 'fairfax-city-2025-general' },
+  { key: 'falls_church', name: 'Falls Church City', datasetId: 'falls-church-2025-general' },
+  { key: 'manassas', name: 'Manassas City', datasetId: 'manassas-2025-general' },
+  { key: 'manassas_park', name: 'Manassas Park City', datasetId: 'manassas-park-2025-general' },
 ];
 
 export const JURISDICTIONS = SCOPE.map((j) => ({
@@ -72,11 +78,25 @@ export const NOV2025 = {
     vbm: withData.reduce((s, j) => s + j.vbm, 0),
     registered: withData.reduce((s, j) => s + (j.registered || 0), 0),
   },
-  /* Only meaningful while every reporting jurisdiction has a registered
-     count; null the moment one doesn't, rather than dividing by a
-     partial denominator. */
-  turnout: withData.length && withData.every((j) => j.registered)
-    ? (withData.reduce((s, j) => s + j.total, 0)
-       / withData.reduce((s, j) => s + j.registered, 0)) * 100
+  /* Computed over the jurisdictions that have a registration count and
+     no others — nine jurisdictions' ballots over one jurisdiction's
+     electorate is not a turnout figure. `turnoutCovers` says how many
+     went into it so the page can name its own scope instead of implying
+     the region. */
+  ...(() => {
+    const known = withData.filter((j) => j.registered);
+    const ballots = known.reduce((s, j) => s + j.total, 0);
+    const voters = known.reduce((s, j) => s + j.registered, 0);
+    return {
+      turnout: voters ? (ballots / voters) * 100 : null,
+      turnoutVoters: voters || null,
+      turnoutCovers: known.length,
+    };
+  })(),
+  /* How the region as a whole split between the two ways of voting —
+     available for every jurisdiction, unlike the turnout figure. */
+  inPersonShare: withData.length
+    ? (withData.reduce((s, j) => s + j.inPerson, 0)
+       / withData.reduce((s, j) => s + j.total, 0)) * 100
     : null,
 };

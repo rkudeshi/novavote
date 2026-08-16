@@ -685,6 +685,9 @@
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
 }
 .key { background: var(--surface); padding: 18px 18px 20px; }
+/* The value can be a range ("68–82%"), which is wider than a single
+   figure and must not push the grid track open. */
+.key-v { overflow-wrap: anywhere; }
 .key-v {
   font-family: var(--font-display); font-weight: 700; font-size: 30px;
   letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--ink);
@@ -774,6 +777,7 @@
 .keys .key:nth-child(3) { animation-delay: .2s; }
 .keys .key:nth-child(4) { animation-delay: .28s; }
 .keys .key:nth-child(5) { animation-delay: .36s; }
+.keys .key:nth-child(6) { animation-delay: .44s; }
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: none; }
@@ -848,4 +852,16 @@
 @media (max-width: 640px) {
   .sched-tbl th { width: 88px; font-size: 12.5px; }
   .sched-span { font-size: 12px; }
+}
+
+/* ---------------- comparison scope switch, card groups ------------- */
+/* A second segmented control under the section head. It sits on its own
+   row rather than beside the metric switch: two segmented controls in
+   one header wrap into each other on a phone. */
+.seg-scope { margin: 0 0 14px; }
+
+.grid-group {
+  font-family: var(--font-body); font-size: 12px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  margin: 0 0 14px;
 }

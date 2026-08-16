@@ -140,9 +140,62 @@ and suppression of final-week stats. It exists because the 2023 and 2024
 reports are mid-cycle snapshots (see below) — and it is the same mechanism
 an in-progress 2026 cycle will use while daily pulls are running.
 
+## Two levels of data, and why
+
+**Fairfax has an operational report; nobody else does.** Every other
+Northern Virginia locality is built from the state's daily absentee file,
+which carries two cumulative counts — early ballots cast in person, and
+mail ballots returned — and nothing else. That is the **locality baseline
+template**: `LOCALITY_CYCLES` + `buildLocalityCycle()` in `gen-data.mjs`,
+fed by `scripts/parse_dal.py` from snapshots in `data/sources/dal/`. It
+produces the same dataset shape as a report cycle with four things
+carried as **null, never zero**: no site breakdown, no mail-versus-drop-box
+split, no daily ballots-issued count, no surrendered ballots.
+
+`ds.detail` (`{sites, returnRoute, ballotsIssued, surrendered}`) is what
+the UI reads. Ask it rather than inferring absence from a zero — a zero
+renders as "nobody used a drop box" instead of "that isn't recorded
+here". Report cycles derive their own flags from the columns their CSVs
+actually have, so 2022 (no surrendered-ballot section) describes itself
+correctly too.
+
+**The method is checkable, which is the only reason it ships.** Fairfax
+appears in the same statewide file *and* publishes its own report, so the
+two can be compared directly: in person 137,215 vs the county's 137,221
+(6 apart), mail 63,832 vs 64,367 (0.83%). `checkLocalityMethod()` asserts
+both on every build and fails if a future import drifts. Don't remove it —
+eight jurisdictions rest on it.
+
+Two properties of that file are real, not artefacts, and both are handled
+in `parse_dal.py`:
+
+- **In person moves the day a ballot is cast; mail moves when a ballot is
+  *processed***, which mostly happens after Election Day. Fairfax reads
+  51,567 mail on 1 Nov and climbs to 63,832 by 9 Nov. Cutting the file at
+  1 Nov under-reports mail by a fifth while looking perfectly reasonable.
+  Rows are kept past the election and phase-tagged (`early`/`election`/
+  `post`) instead.
+- **Snapshot gaps and duplicates.** Two snapshots landed on 29 Sept 2025;
+  keeping only the later one silently drops the earlier one's delta (727
+  Loudoun ballots). And no file was published for 27–28 Sept, so the 29th
+  covers three days. That whole delta is assigned to the span's **first**
+  day and every day in the span is flagged `span_days`. For this cycle
+  that is verified, not guessed: Fairfax's own report — which is not
+  derived from this file — records 1,982 in person on the Friday and zero
+  on both weekend days, exactly matching the span. A future gap could
+  fall mid-week, where placement really would be an assumption, so the
+  flag stays.
+
+Negative daily deltas are preserved and flagged, never clamped: they are
+upstream status corrections, and zeroing them inflates the running total.
+
+The publisher asks that this series be labelled as derived rather than
+official. It carries `status: 'Unofficial daily totals'` — no source is
+named in user-facing text, per the presentation rules below.
+
 ## Data pipeline
 
-Three scripts, all self-checking:
+Four scripts, all self-checking:
 
 - `scripts/build_csvs.py` — regenerates the 2025 CSVs from hand-transcribed
   source data. Asserts every total including each of the 16 site columns
@@ -155,6 +208,11 @@ Three scripts, all self-checking:
   Fused cells (the text layer occasionally runs two rows together, e.g.
   `"8 1"`) are recovered from row identities, and only when exactly one
   component is missing — so a site that had not opened is never invented.
+- `scripts/parse_dal.py` — differences the daily absentee snapshots into
+  one row per activity date per locality. Asserts the summed deltas land
+  exactly on the file's own final cumulative figure, so a dropped delta
+  fails rather than quietly shrinking a total, and refuses to trim
+  pre-window rows that carry activity.
 - `scripts/gen-data.mjs` — compiles `data/**.csv` into
   `src/data/generated/`. Asserts published totals, rejects unlabelled
   sites, rejects a cycle listing both halves of a site alias, and asserts
@@ -301,17 +359,20 @@ every push to `main`.
 
 ## Not done yet / where to pick up
 - **Final 2023/2024 reports** — the two we have are partial (above).
-- **Other localities** (Northern Virginia only, by design): Loudoun,
-  Prince William, Arlington, Alexandria City, Fairfax City, Falls Church
-  City. Naming convention is "<Name> City", never "City of <Name>".
+- **Past cycles for the eight non-Fairfax localities.** Nov 2025 is in
+  (see the locality baseline above); 2020–2024 are not. Same template —
+  land the snapshots, add entries to `LOCALITY_CYCLES`.
+  Naming convention is "<Name> City", never "City of <Name>".
   `src/data/jurisdictions.js` is the scope list; a jurisdiction with no
   reconciled dataset carries `total: null` and renders as "no figures
   recorded yet" — **never** fill it with an estimate or a press figure.
-  The comparison charts are already normalised
-  (days-until-election, share of electorate), so a new locality is one
-  more entry in `CYCLES` plus its CSVs — no chart changes.
-- **Registered-voter counts** for 2023/2024, so the "share of electorate"
-  comparison covers them; only 2025 has one.
+- **Registered-voter counts** for eight of nine 2025 localities, and for
+  Fairfax 2023/2024. This is the biggest single gap: share of electorate
+  is the measure that compares a county of 810,000 with a city of 10,000
+  on equal footing, and right now only Fairfax 2025 has a denominator, so
+  eight rows on the home page read "—". The right source is ELECT's
+  registration statistics, which the sandbox cannot reach — it needs a
+  CI-side fetch like the weather and boundary jobs.
 - **Real geocoding** for site coordinates.
 - **Precinct-level data**: the right upstream source is the Virginia Dept.
   of Elections (ELECT) — Daily Absentee List (DAL), Registered Voter List

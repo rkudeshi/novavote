@@ -19,8 +19,7 @@ export function dayTotal(d) {
 
 /** Sum of every early ballot in a dataset, all methods. */
 export function earlyTotal(ds) {
-  const t = ds.totals;
-  return t.inPerson + t.returnedMail + t.returnedDropbox;
+  return methodTotals(ds).early;
 }
 
 /**
@@ -73,7 +72,14 @@ export function closingShare(ds, n = 7) {
   if (!isComplete(ds)) return null;
   const rows = timeline(ds);
   const total = rows.reduce((s, r) => s + r.value, 0);
-  const late = rows.filter((r) => r.daysOut <= n).reduce((s, r) => s + r.value, 0);
+  /* Bounded at both ends. Ballots returned by mail keep being counted
+     for days after Election Day, which lands them at a negative
+     days-out; those are early ballots and belong in the denominator,
+     but "the final week" means the last seven days before the election,
+     not the week after it. */
+  const late = rows
+    .filter((r) => r.daysOut <= n && r.daysOut >= 0)
+    .reduce((s, r) => s + r.value, 0);
   return total ? (late / total) * 100 : 0;
 }
 
@@ -88,13 +94,20 @@ export function closingShare(ds, n = 7) {
  */
 export function methodTotals(ds) {
   const t = ds.totals;
-  const vbm = t.returnedMail + t.returnedDropbox;
+  /* Null and zero are different here and the coalescing is deliberate.
+     A dataset with no mail-versus-drop-box split carries returnedDropbox
+     as null; it still returned mail ballots, so the group total is real
+     even though one route's figure does not exist. Callers that need to
+     draw the split ask ds.detail.returnRoute rather than reading a zero. */
+  const byMail = t.returnedMail || 0;
+  const byDropbox = t.returnedDropbox || 0;
+  const vbm = byMail + byDropbox;
   return {
-    inPerson: t.inPerson,
+    inPerson: t.inPerson || 0,
     vbm,
     byMail: t.returnedMail,
     byDropbox: t.returnedDropbox,
-    early: t.inPerson + vbm,
+    early: (t.inPerson || 0) + vbm,
   };
 }
 

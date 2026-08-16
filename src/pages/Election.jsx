@@ -47,9 +47,27 @@ const METHODS = [
   { key: 'returnedDropbox', label: 'Returned by drop box', color: 'var(--s3)', hex: '#1baf7a' },
 ];
 
+/**
+ * What this election is worth comparing against.
+ *
+ * A jurisdiction with several cycles compares against its own past —
+ * that is the question its page is asking. One with a single cycle
+ * compares against the other jurisdictions that voted the same day.
+ * Passing every dataset to both would put fourteen curves on one chart
+ * and answer neither.
+ */
+function peersOf(ds, all) {
+  const ownHistory = all.filter((d) => d.locality === ds.locality && d.id !== ds.id);
+  if (ownHistory.length) return { peers: ownHistory, kind: 'years' };
+  return {
+    peers: all.filter((d) => d.electionDate === ds.electionDate && d.id !== ds.id),
+    kind: 'places',
+  };
+}
+
 export default function Election({ ds, all }) {
   const s = summary(ds);
-  const others = all.filter((d) => d.id !== ds.id);
+  const { peers, kind } = peersOf(ds, all);
 
   return (
     <>
@@ -61,12 +79,20 @@ export default function Election({ ds, all }) {
           </div>
           <h1 className="h1" style={{ marginTop: 8 }}>{ds.locality}</h1>
           <p className="lede" style={{ marginTop: 16 }}>
-            {fmt(s.early)} early ballots across {s.votingDays} voting days and{' '}
-            {ds.sites.length} in-person site{ds.sites.length === 1 ? '' : 's'}.
+            {fmt(s.early)} early ballots across {s.votingDays} voting days
+            {ds.detail.sites
+              ? ` and ${ds.sites.length} in-person site${ds.sites.length === 1 ? '' : 's'}.`
+              : '.'}
             {s.complete
               ? ` ${pct(s.closing7)} arrived in the final week.`
               : ' Coverage stops before Election Day — see the note below.'}
           </p>
+
+          {/* Explains a shape that is visible in the data below: the mail
+              line keeps rising after Election Day. */}
+          {s.complete && ds.coverage.note && (
+            <p className="note" style={{ marginTop: 14 }}>{ds.coverage.note}</p>
+          )}
 
           {!s.complete && (
             <div className="notice" style={{ marginTop: 22 }}>
@@ -111,6 +137,7 @@ export default function Election({ ds, all }) {
         </section>
       )}
 
+      {ds.detail.returnRoute && (
       <section className="section">
         <div className="wrap">
           <h2 className="h2" style={{ marginBottom: 8 }}>Vote by mail</h2>
@@ -134,16 +161,19 @@ export default function Election({ ds, all }) {
           </div>
         </div>
       </section>
+      )}
 
       <section className="section">
         <div className="wrap">
           <h2 className="h2" style={{ marginBottom: 8 }}>How the vote came in</h2>
           <p className="note" style={{ marginBottom: 22 }}>
             Each day is plotted by how many days it fell before Election Day, so
-            cycles line up against each other.
+            {kind === 'years'
+              ? ' cycles line up against each other.'
+              : ' jurisdictions line up against each other.'}
           </p>
           <div className="card chart-card">
-            <SurgeChart datasets={[ds, ...others]} metric="share" height={360} />
+            <SurgeChart datasets={[ds, ...peers]} metric="share" height={360} />
           </div>
         </div>
       </section>
@@ -218,26 +248,36 @@ function Kpi({ k, v, s }) {
 
 function DailyVolume({ ds }) {
   const [mode, setMode] = useState('daily');
-  const [active, setActive] = useState(METHODS.map((m) => m.key));
+
+  /* Only the methods this dataset actually separates. Without the route
+     split, "returned by mail" is the whole vote-by-mail group, so it is
+     relabelled rather than shown beside an empty drop-box series. */
+  const methods = useMemo(() => {
+    if (ds.detail.returnRoute) return METHODS;
+    return METHODS.filter((m) => m.key !== 'returnedDropbox').map((m) =>
+      m.key === 'returnedMail' ? { ...m, label: 'Vote by mail' } : m);
+  }, [ds]);
+
+  const [active, setActive] = useState(methods.map((m) => m.key));
 
   const data = useMemo(() => {
     const run = { inPerson: 0, returnedMail: 0, returnedDropbox: 0 };
     return ds.days.map((d) => {
       const row = { date: d.date, label: shortDate(d.date) };
-      METHODS.forEach((m) => {
+      methods.forEach((m) => {
         const v = d[m.key] || 0;
         run[m.key] += v;
         row[m.key] = mode === 'daily' ? v : run[m.key];
       });
       return row;
     });
-  }, [ds, mode]);
+  }, [ds, methods, mode]);
 
   const toggle = (k) =>
     setActive((a) =>
       a.includes(k) ? (a.length > 1 ? a.filter((x) => x !== k) : a) : [...a, k]);
 
-  const shown = METHODS.filter((m) => active.includes(m.key));
+  const shown = methods.filter((m) => active.includes(m.key));
 
   return (
     <section className="section">
@@ -254,7 +294,7 @@ function DailyVolume({ ds }) {
         </div>
 
         <div className="legend">
-          {METHODS.map((m) => (
+          {methods.map((m) => (
             <button
               key={m.key}
               className={`legend-item ${active.includes(m.key) ? 'is-on' : ''}`}
@@ -415,10 +455,13 @@ function DataTable({ ds }) {
        numbers rather than as wide as its name — which is most of what was
        pushing this table off the side of a phone. */
     { k: 'inPerson', l: 'In person', l2: 'ballots' },
-    { k: 'returnedMail', l: 'Vote by mail', l2: 'by mail' },
-    { k: 'returnedDropbox', l: 'Vote by mail', l2: 'drop box' },
-    { k: 'ballotsMailed', l: 'Issued', l2: 'by mail' },
-    {
+    /* A column the dataset does not record is left out entirely rather
+       than filled with dashes: an empty column is still column width,
+       and on a phone that is the scarce thing. */
+    { k: 'returnedMail', l: 'Vote by mail', l2: ds.detail.returnRoute ? 'by mail' : 'returned' },
+    ds.detail.returnRoute && { k: 'returnedDropbox', l: 'Vote by mail', l2: 'drop box' },
+    ds.detail.ballotsIssued && { k: 'ballotsMailed', l: 'Issued', l2: 'by mail' },
+    ds.days.some((d) => d.weather) && {
       k: 'weather',
       l: 'Weather',
       l2: '',
@@ -432,7 +475,7 @@ function DataTable({ ds }) {
           </span>
         ) : '—',
     },
-  ];
+  ].filter(Boolean);
 
   const colMax = useMemo(() => {
     const m = {};
@@ -476,14 +519,19 @@ function DataTable({ ds }) {
   };
 
   const download = () => {
-    const head = ['date', 'early_in_person', 'returned_by_mail', 'returned_by_dropbox',
-      'ballots_mailed', ...ds.sites.map((s) => s.key)];
-    const lines = [head.join(',')];
+    const fields = [
+      ['early_in_person', (d) => d.inPerson],
+      [ds.detail.returnRoute ? 'returned_by_mail' : 'vote_by_mail_returned',
+        (d) => d.returnedMail],
+      ...(ds.detail.returnRoute
+        ? [['returned_by_dropbox', (d) => d.returnedDropbox]] : []),
+      ...(ds.detail.ballotsIssued
+        ? [['ballots_mailed', (d) => d.ballotsMailed]] : []),
+      ...ds.sites.map((s) => [s.key, (d) => d.sites[s.key]]),
+    ];
+    const lines = [['date', ...fields.map(([n]) => n)].join(',')];
     ds.days.forEach((d) => {
-      lines.push([
-        d.date, d.inPerson ?? '', d.returnedMail ?? '', d.returnedDropbox ?? '',
-        d.ballotsMailed ?? '', ...ds.sites.map((s) => d.sites[s.key] ?? ''),
-      ].join(','));
+      lines.push([d.date, ...fields.map(([, get]) => get(d) ?? '')].join(','));
     });
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
