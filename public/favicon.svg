@@ -1,0 +1,11 @@
+<!-- The brand mark from the site header, at icon scale: a rising bar
+     cluster, which is the shape the data actually makes. Colours are the
+     literal hex of the same CSS custom properties Shell.jsx uses — an
+     SVG served as a favicon has no page to inherit them from. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
+  <rect width="22" height="22" rx="4" fill="#F7F6F2"/>
+  <rect x="2"  y="14" width="3.6" height="6"  rx="1.2" fill="#86b6ef"/>
+  <rect x="7"  y="11" width="3.6" height="9"  rx="1.2" fill="#5598e7"/>
+  <rect x="12" y="8"  width="3.6" height="12" rx="1.2" fill="#2a78d6"/>
+  <rect x="17" y="4"  width="3.6" height="16" rx="1.2" fill="#B4741A"/>
+</svg>
